@@ -15,9 +15,19 @@ export interface Page {
 export type Status = "draft" | "queued" | "processing" | "done" | "error";
 export type OutputKind = "translated" | "scan" | "side_by_side";
 
+export type NameSource = "default" | "manual" | "ai";
+
+export interface NameSuggestion {
+  name: string;
+  date: string;
+  sender: string;
+  subject: string;
+}
+
 export interface Doc {
   id: string;
   name: string;
+  name_source?: NameSource;
   created: number;
   pages: Page[];
   status: Status;
@@ -69,7 +79,9 @@ export const api = {
   listDocs: () => req<Doc[]>("GET", "/api/docs"),
   createDoc: (name = "") => req<Doc>("POST", "/api/docs", { name }),
   getDoc: (id: string) => req<Doc>("GET", d(id)),
-  renameDoc: (id: string, name: string) => req<Doc>("PATCH", d(id), { name }),
+  renameDoc: (id: string, name: string, name_source: "manual" | "ai" = "manual") =>
+    req<Doc>("PATCH", d(id), { name, name_source }),
+  suggestName: (id: string) => req<NameSuggestion>("POST", `${d(id)}/suggest-name`),
   reorder: (id: string, page_order: string[]) => req<Doc>("PATCH", d(id), { page_order }),
   deleteDoc: (id: string) => req<{ ok: boolean }>("DELETE", d(id)),
   uploadPages: (id: string, files: Blob[]) => {

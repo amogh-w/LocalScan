@@ -93,15 +93,16 @@ class OllamaTranslator:
             return False, f"{self.url}: {e}"
 
     def _chat(self, system: str, user: str, ids: list[str]) -> dict[str, Any]:
+        schema = {"type": "object", "properties": {i: {"type": "string"} for i in ids}, "required": ids}
+        return self.chat_json(system, user, schema)
+
+    def chat_json(self, system: str, user: str, schema: dict[str, Any]) -> dict[str, Any]:
+        """One chat turn whose reply must match `schema` (Ollama structured outputs)."""
         body: dict[str, Any] = {
             "model": self._model(),
             "stream": False,
             "think": False,
-            "format": {
-                "type": "object",
-                "properties": {i: {"type": "string"} for i in ids},
-                "required": ids,
-            },
+            "format": schema,
             "options": {"temperature": self.temperature, "num_ctx": 16384},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }

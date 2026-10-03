@@ -6,6 +6,8 @@ import queue
 import threading
 import traceback
 
+import numpy as np
+
 from . import storage
 from .config import settings
 from .ocr.blocks import group_blocks
@@ -50,6 +52,51 @@ def _uses_pdf_text(page: dict) -> bool:
     return bool(page.get("pdf_lines")) and page["corners"] == FULL_IMAGE and page["rotation"] % 360 == 0
 
 
+class _OcrHolder:
+    """Creates the OCR engine only when a page actually needs OCR."""
+
+    def __init__(self) -> None:
+        self.engine = None
+
+    def get(self):
+        self.engine = self.engine or get_ocr()
+        return self.engine
+
+
+def prepare_page(doc_id: str, page: dict, ocr: _OcrHolder) -> np.ndarray:
+    """Dewarp + filter the page and OCR it, reusing cached results. Updates `page` in place."""
+    d = storage.doc_dir(doc_id)
+    key = clean_key(page)
+    clean_path = d / "pages" / f"{page['id']}.clean.jpg"
+    if page.get("clean_key") == key and clean_path.exists():
+        img = read_image(clean_path)
+    else:
+        img = process_page(read_image(d / page["file"]), page["corners"], page["rotation"], page["filter"])
+        write_image(clean_path, img)
+        page["clean_key"] = key
+    if page.get("ocr_key") != key:
+        page["lines"] = page["pdf_lines"] if _uses_pdf_text(page) else ocr.get().ocr(img)
+        page["ocr_key"] = key
+    return img
+
+
+def document_text(doc_id: str, max_pages: int = 2) -> str:
+    """Reading-order text of the first pages, OCR'ing them if needed (used for AI naming on request)."""
+    doc = storage.load_doc(doc_id)
+    pages = doc["pages"][:max_pages]
+    ocr = _OcrHolder()
+    for page in pages:
+        prepare_page(doc_id, page, ocr)
+    with storage.editing(doc_id) as fresh:  # store the OCR so translating later doesn't redo it
+        by_id = {p["id"]: p for p in pages}
+        fresh["pages"] = [by_id.get(p["id"], p) for p in fresh["pages"]]
+    return page_texts(pages)
+
+
+def page_texts(pages: list[dict]) -> str:
+    return "\n\n".join(b["text"] for i, p in enumerate(pages) for b in group_blocks(p.get("lines") or [], i))
+
+
 def process(doc_id: str) -> None:
     doc = storage.load_doc(doc_id)
     d = storage.doc_dir(doc_id)
@@ -59,26 +106,11 @@ def process(doc_id: str) -> None:
     n = len(pages)
 
     # 1. Dewarp + filter, and OCR (both cached per page).
-    ocr = None
+    ocr = _OcrHolder()
     images = []
     for i, page in enumerate(pages):
         _progress(doc_id, "Cleaning and reading pages", i, n)
-        key = clean_key(page)
-        clean_path = d / "pages" / f"{page['id']}.clean.jpg"
-        if page.get("clean_key") == key and clean_path.exists():
-            img = read_image(clean_path)
-        else:
-            img = process_page(read_image(d / page["file"]), page["corners"], page["rotation"], page["filter"])
-            write_image(clean_path, img)
-            page["clean_key"] = key
-        images.append(img)
-        if page.get("ocr_key") != key:
-            if _uses_pdf_text(page):
-                page["lines"] = page["pdf_lines"]
-            else:
-                ocr = ocr or get_ocr()
-                page["lines"] = ocr.ocr(img)
-            page["ocr_key"] = key
+        images.append(prepare_page(doc_id, page, ocr))
         _save(doc_id, pages=pages)
 
     blocks_per_page = [group_blocks(p["lines"], i) for i, p in enumerate(pages)]

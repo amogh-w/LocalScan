@@ -55,6 +55,13 @@ The pipeline for each document (`jobs.process`):
    engine. Blocks are sent as JSON `{id: text}` with a JSON-schema `format` that requires every id;
    missing ids are retried, and after that the source text is kept. The prompt is `SYSTEM_PROMPT` in
    `ollama.py`.
+Naming is **manual only**: the user clicks "Suggest name with AI" in the Name group of the Options panel
+(`NameOptions.tsx`) or ✨ on a Library card, and
+`POST /api/docs/<id>/suggest-name` (`ai/naming.py`, reading the pages first if needed) returns
+`<letter date> <sender> - <subject in English>` as a suggestion to Use or dismiss. Never rename documents
+automatically; the user removed auto-renaming on purpose. `name_source: "ai"` only drives the ✨
+marker. Prompt examples steer the model strongly (an "Electricity ..." example made it invent
+"electricity"), so keep them neutral.
 5. **Render** (`render/`): `inpaint.py` erases the OCR'd lines with the paper colour, using inpainting
    only on busy backgrounds. `pdf.py` builds the three PDFs with PyMuPDF. Font size comes from line
    *width* (Helvetica metrics), not box height, and is snapped per page. Text goes in its own box first,

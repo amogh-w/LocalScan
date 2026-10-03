@@ -102,6 +102,8 @@ h2 { font-size: 16px; margin: 0 0 10px; }
 /* Corner editor */
 .corner-editor { display: flex; justify-content: center; touch-action: none; user-select: none; }
 .ce-box { position: relative; width: min(100%, calc(var(--stage-h, 68dvh) * var(--ar, 0.75))); }
+/* Inside the workspace, size from the stage's real box (container query units), not the window. */
+.stage .ce-box { width: min(100cqw, calc(100cqh * var(--ar, 0.75))); }
 .ce-box img { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; border-radius: 4px; }
 .ce-box svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .ce-shade { fill: var(--shade); }
@@ -220,7 +222,7 @@ p.with-icon svg, span.with-icon svg { width: 15px; height: 15px; }
 }
 .seg button.on { background: var(--raised); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px var(--shadow); }
 .preview {
-  width: auto; height: auto; max-width: 100%; max-height: var(--stage-h, 68dvh); min-width: 0; flex: none;
+  width: auto; height: auto; max-width: 100%; max-height: 100cqh; min-width: 0; flex: none;
   object-fit: contain; border-radius: 6px; box-shadow: 0 1px 6px var(--shadow);
 }
 .pill {
@@ -264,7 +266,7 @@ progress { width: 100%; height: 6px; accent-color: var(--accent); }
 /* Page */
 .page-panel { align-items: center; overflow: hidden; }
 .stage {
-  --stage-h: calc(100dvh - 250px);
+  container-type: size;
   flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center;
 }
 .pager {
@@ -308,7 +310,6 @@ progress { width: 100%; height: 6px; accent-color: var(--accent); }
 .workspace:not(.show-options) .options-panel { display: none; }
 @media (max-width: 999px) {
   .workspace { padding: 10px; }
-  .stage { --stage-h: calc(100dvh - 270px); }
 }
 
 /* Wide: all three panels side by side, no tab bar */
@@ -316,5 +317,33 @@ progress { width: 100%; height: 6px; accent-color: var(--accent); }
   .workspace { grid-template-columns: minmax(220px, 300px) minmax(0, 1fr) minmax(250px, 300px); padding: 16px; gap: 16px; }
   .workspace .pages-panel, .workspace .page-panel, .workspace .options-panel { display: flex !important; }
   .tabbar { display: none; }
-  .stage { --stage-h: calc(100dvh - 210px); }
 }
+
+/* Naming: document title and library cards with on-demand AI suggestion, AI marker, inline rename */
+.doc-title { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.doc-title-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.doc-title-row .title-input { width: auto; flex: 0 1 auto; min-width: 8ch; max-width: 100%; field-sizing: content; text-overflow: ellipsis; }
+.title-input:hover:not(:focus) { background: var(--raised); }
+.ai-btn { color: var(--accent); }
+.ai-btn:hover:not(:disabled) { color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, transparent); }
+.ai-mark { display: inline-flex; color: var(--accent); flex: none; }
+.ai-mark svg { width: 15px; height: 15px; }
+.suggestion {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; padding: 6px 8px 6px 10px;
+  border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 14px;
+}
+p.suggestion { background: transparent; border-color: transparent; padding: 0 10px; font-size: 13px; }
+.suggestion .sparkle { width: 16px; height: 16px; color: var(--accent); }
+.suggestion-name { flex: 1; min-width: 12ch; font-weight: 600; overflow-wrap: anywhere; }
+.doc-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.doc-name { display: flex; align-items: center; gap: 6px; }
+.doc-name:hover { color: var(--accent); }
+.doc-rename { font-weight: 600; border-color: var(--accent); }
+.doc-card-actions { display: flex; gap: 2px; align-self: flex-start; }
+.doc-meta .badge { align-self: flex-start; }
+.name-field { background: var(--bg); border-color: var(--line); padding: 8px 10px; }
+.name-field:focus { border-color: var(--accent); }
+.options-panel .suggestion { flex-wrap: wrap; }
+.options-panel .suggestion-name { flex-basis: 100%; order: -1; font-size: 13px; }
+.options-panel .suggestion .sparkle { display: none; }

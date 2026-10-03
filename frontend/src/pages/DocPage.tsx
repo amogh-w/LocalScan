@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { api, fileUrl, imageUrl, prepareImage, previewUrl, type Doc, type Filter, type Page, type Point } from "../api";
 import CornerEditor from "../components/CornerEditor";
+import DocTitle from "../components/DocTitle";
+import NameOptions from "../components/NameOptions";
 import { Downloads, StatusBadge } from "../components/common";
 
 const FILTERS: { id: Filter; label: string; icon: LucideIcon }[] = [
@@ -171,13 +173,7 @@ export default function DocPage({ id }: { id: string }) {
   return (
     <div className="screen doc-screen">
       <Header
-        title={
-          <input
-            className="title-input"
-            defaultValue={doc.name}
-            onBlur={(e) => e.target.value !== doc.name && run(async () => setDoc(await api.renameDoc(id, e.target.value)))}
-          />
-        }
+        title={<DocTitle doc={doc} onChange={setDoc} onError={setError} />}
         right={
           <button className="icon-btn" onClick={removeDoc} disabled={busy} aria-label="Delete document" title="Delete document">
             <Trash2 />
@@ -274,6 +270,7 @@ export default function DocPage({ id }: { id: string }) {
 
         {/* Options: color, crop, other actions, then translate/export */}
         <aside className="panel options-panel">
+          <NameOptions doc={doc} onChange={setDoc} onError={setError} />
           {page && (
             <>
               <section className="opt-group">

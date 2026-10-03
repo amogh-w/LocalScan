@@ -3,9 +3,10 @@ import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
 import cv2
+import httpx
 import pymupdf as fitz
 import numpy as np
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
@@ -13,6 +14,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from .. import jobs, storage
+from ..ai import naming
 from ..ocr.pdf_text import page_lines
 from ..scan.detect import FULL_IMAGE, detect_corners
 from ..scan.io import decode_upload, encode_jpeg, read_image, write_image
@@ -61,6 +63,8 @@ class NewDoc(BaseModel):
 
 class DocPatch(BaseModel):
     name: str | None = None
+    # Who chose the name: "manual" (typed) by default, "ai" when accepting a suggestion.
+    name_source: Literal["manual", "ai"] = "manual"
     page_order: list[str] | None = None
 
 
@@ -77,8 +81,11 @@ def list_docs():
 
 @router.post("")
 def create_doc(body: NewDoc):
-    name = body.name.strip() or time.strftime("Scan %Y-%m-%d %H-%M")
-    return storage.create_doc(name)
+    name = body.name.strip()
+    doc = storage.create_doc(name or time.strftime("Scan %Y-%m-%d %H-%M"))
+    with _edit(doc["id"]) as doc:
+        doc["name_source"] = "manual" if name else "default"
+    return doc
 
 
 @router.get("/{doc_id}")
@@ -89,8 +96,9 @@ def get_doc(doc_id: str):
 @router.patch("/{doc_id}")
 def patch_doc(doc_id: str, body: DocPatch):
     with _edit(doc_id) as doc:
-        if body.name is not None:
-            doc["name"] = body.name.strip() or doc["name"]
+        if body.name is not None and body.name.strip():
+            doc["name"] = body.name.strip()[:120]
+            doc["name_source"] = body.name_source
         if body.page_order is not None:
             _editable(doc)
             by_id = {p["id"]: p for p in doc["pages"]}
@@ -220,6 +228,23 @@ def autodetect(doc_id: str, page_id: str):
         page["corners"] = page["detected"] = corners
         _mark_dirty(doc)
     return page
+
+
+@router.post("/{doc_id}/suggest-name")
+def suggest_name(doc_id: str):
+    """AI name from the document's text: {name, date, sender, subject}. Reads the pages first if needed."""
+    doc = _doc(doc_id)
+    if not doc["pages"]:
+        raise HTTPException(400, "add pages first")
+    try:
+        # While processing, use the text read so far instead of competing with the worker.
+        busy = doc["status"] in ("queued", "processing")
+        text = jobs.page_texts(doc["pages"][:2]) if busy else jobs.document_text(doc_id)
+        return naming.suggest_name(text)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Ollama is not reachable: {e}")
 
 
 @router.post("/{doc_id}/process")
