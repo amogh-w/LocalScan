@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Camera, ChevronLeft, ChevronRight, Contrast, Crop, Eye, FileUp, Image,
-  Images, Languages, LayoutGrid, LoaderCircle, Maximize, Palette, RotateCcw, RotateCw, ScanSearch, ScanText,
-  SlidersHorizontal, Sparkles, Trash2, type LucideIcon,
+  Images, Languages, LayoutGrid, ListOrdered, LoaderCircle, Maximize, Palette, RotateCcw, RotateCw, ScanSearch, ScanText,
+  SlidersHorizontal, Sparkles, Split, Trash2, Undo2, X, type LucideIcon,
 } from "lucide-react";
 import { api, imageUrl, prepareImage, previewUrl, type Doc, type Filter, type Page, type Point } from "../api";
 import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
 import NameOptions from "../components/NameOptions";
 import Organize from "../components/Organize";
+import SortPages, { type SortResult } from "../components/SortPages";
 import { PdfLinks, StatusBadge } from "../components/common";
 
 const FILTERS: { id: Filter; label: string; icon: LucideIcon }[] = [
@@ -39,6 +40,11 @@ export default function DocPage({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>("pages");
   const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sorting, setSorting] = useState<"split" | "order" | null>(null);
+  const [sorted, setSorted] = useState<SortResult | null>(null);
+  const [hintGone, setHintGone] = useState(() => {
+    try { return localStorage.getItem(`sortHint:${id}`) === "1"; } catch { return false; }
+  });
   const dragFrom = useRef<number | null>(null);
   // Page edits are sent one at a time, in order; only the newest reply updates the screen.
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -68,6 +74,30 @@ export default function DocPage({ id }: { id: string }) {
   useEffect(() => {
     if (doc && (!selected || !doc.pages.some((p) => p.id === selected))) setSelected(doc.pages[0]?.id ?? null);
   }, [doc, selected]);
+
+  const dismissHint = () => {
+    setHintGone(true);
+    try { localStorage.setItem(`sortHint:${id}`, "1"); } catch { /* private mode */ }
+  };
+
+  const applied = (result: SortResult) => {
+    setSorting(null);
+    setSorted(result);
+    if (result.kind === "reorder") setDoc(result.doc);
+  };
+
+  const undoSort = () => run(async () => {
+    if (!sorted) return;
+    if (sorted.kind === "split") await api.bulk(sorted.docs.map((d) => d.id), "delete");
+    else setDoc(await api.reorder(id, sorted.previous));
+    setSorted(null);
+  });
+
+  const removeCopied = () => run(async () => {
+    if (sorted?.kind !== "split" || !window.confirm(`Remove these ${sorted.copied.length} pages from this scan? They stay in the new documents, and the removed copies go to the trash.`)) return;
+    setDoc(await api.removePages(id, sorted.copied));
+    setSorted({ ...sorted, removed: true });
+  });
 
   if (!doc) {
     return (
@@ -196,6 +226,14 @@ export default function DocPage({ id }: { id: string }) {
               <LoaderCircle className="spin" /> Uploading {uploading.done}/{uploading.total}…
             </p>
           )}
+          {doc.pages.length >= 3 && !hintGone && !busy && (
+            <div className="suggestion sort-hint" role="note">
+              <Split className="sparkle" />
+              <span className="suggestion-name">Several documents in this scan?</span>
+              <button className="btn small primary" onClick={() => setSorting("split")}>Sort with AI</button>
+              <button className="icon-btn" onClick={dismissHint} aria-label="Dismiss" title="Dismiss"><X /></button>
+            </div>
+          )}
           {doc.pages.length === 0 ? (
             <div className="empty-state">
               <Camera />
@@ -323,6 +361,18 @@ export default function DocPage({ id }: { id: string }) {
                     onClick={() => move(index, index + 1)} title="Move page later">
                     <ArrowRight /> Later
                   </button>
+                  {doc.pages.length >= 2 && (
+                    <>
+                      <button className="btn small" disabled={busy} onClick={() => setSorting("split")}
+                        title="Find the documents in this scan and put their pages in order">
+                        <Split /> Sort with AI
+                      </button>
+                      <button className="btn small" disabled={busy} onClick={() => setSorting("order")}
+                        title="Keep one document, fix the page order">
+                        <ListOrdered /> Fix order
+                      </button>
+                    </>
+                  )}
                   <button className="btn small danger span-2" disabled={busy} onClick={() => removePage(page)}>
                     <Trash2 /> Delete page
                   </button>
@@ -352,6 +402,25 @@ export default function DocPage({ id }: { id: string }) {
         </aside>
       </div>
 
+      {sorting && <SortPages doc={doc} split={sorting === "split"} onClose={() => setSorting(null)} onApplied={applied} />}
+      {sorted && (
+        <div className="toast" role="status">
+          <span>
+            {sorted.kind === "split"
+              ? `Created ${sorted.docs.length} document${sorted.docs.length === 1 ? "" : "s"}. ${sorted.removed ? "The pages were removed from this scan." : "This scan is unchanged."}`
+              : "Page order updated."}
+          </span>
+          {sorted.kind === "split" && <a className="btn small" href="#/">Library</a>}
+          {sorted.kind === "split" && !sorted.removed && (
+            <button className="btn small" onClick={removeCopied}><Trash2 /> Remove from this scan</button>
+          )}
+          {!(sorted.kind === "split" && sorted.removed) && (
+            <button className="btn small" onClick={undoSort}><Undo2 /> Undo</button>
+          )}
+          <button className="icon-btn" onClick={() => setSorted(null)} aria-label="Dismiss" title="Dismiss"><X /></button>
+        </div>
+      )}
+
       <nav className="tabbar" aria-label="Sections">
         {TABS.map((t) => (
           <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}
@@ -367,7 +436,7 @@ export default function DocPage({ id }: { id: string }) {
 }
 
 function confirmDelete() {
-  return window.confirm("Delete this page?");
+  return window.confirm("Move this page to the trash?");
 }
 
 function Header({ title, right }: { title: React.ReactNode; right?: React.ReactNode }) {

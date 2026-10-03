@@ -85,6 +85,28 @@ drives the sparkle marker.
   German or mistranslates it. Stronger wording and a final reminder were compared on three synthetic
   letters and did not help, so that limit is the model, not the prompt (try another model in Settings).
 
+### Sorting a batch into documents (`ai/sort.py`, `ai/pagesignals.py`)
+
+Manual only: "Sort with AI" (split) and "Fix order" (reorder in place) in Options > Page, plus a dismissible
+hint on documents with 3+ pages. `POST /api/docs/<id>/sort-pages?split=` only proposes;
+`POST /api/docs/<id>/apply-sort` creates new documents (`storage.create_documents_from_pages`) holding
+COPIES of the pages (new page ids, same blobs, OCR keys and crop; folder and tags inherited), so the original
+scan stays as a backup and Undo is a bulk delete of the new documents. Reorder-only applies through the
+existing `page_order` PATCH. Limit: `MAX_PAGES` = 40, text only.
+
+- `pagesignals.py` extracts cheap facts per page with regexes: page markers (header/footer lines only),
+  document-level vs account-level reference numbers, salutation/closing/subject, cut sentences, item numbers.
+- The default engine is `ai/similarity.py`, with no model: TF-IDF keyword vectors (plus word pieces, so
+  compounds match), then divide and conquer by average-linkage merging of the most similar groups until
+  `MERGE_AT`. Hard rules steer it: a shared reference number pulls pages together; the same page number, a
+  different page total, two letter openings or two different invoice numbers keep pages apart. A group is
+  ordered by complete page markers, else opening page first, closing page last and the middle by
+  `boundary_score`; with no cues the photo order is kept and the group is Low. Lone pages that resemble
+  nothing go to the "Needs review" tray. The old model pipeline (describe, anchor, rate) is still in
+  `sort.arrange(method="model")`; the tests cover it, but it is not used.
+- `scripts/sort_benchmark.py` runs synthetic documents (never real letters) through the real model. It is
+  slow, so do not run it in loops; unit tests use a fake model (`tests/test_sort.py`).
+
 ## Frontend
 
 React + Vite + TypeScript (`frontend/src`) with hash routing: `#/`, `#/unfiled`, `#/folder/<id>`,
@@ -147,6 +169,13 @@ first paint, so keep the two in sync. The picker is `components/AppearancePicker
   - The Library loads all documents and filters by view in the browser. Drag-and-drop carries document
     ids in the `application/x-localscan-docs` data type; the tile's link and image are
     `draggable={false}` so a drag starts on the tile, not on the image.
+- **Trash** (migration `003`): deleting a document sets `documents.deleted_at` (`storage.trash_doc`); the
+  pages and files stay. `list_docs` hides trashed documents unless `trashed=True`; folder and tag counts
+  skip them. `#/trash` lists them with Restore, Delete forever and Empty trash, and `storage.init` purges
+  anything trashed more than `TRASH_DAYS` (30) ago. Bulk actions: `delete` = to the trash, `restore`,
+  `purge` = for good (only from the trash). Deleted pages (single delete, or removing sorted pages from the
+  source) are kept too: `storage.trash_pages` stores them as a trashed document, which Restore turns
+  into a separate document. Folders and tags are organisation, not content, and are deleted directly.
 - **Legacy data:** an old `data/docs/*/doc.json` tree is imported once on startup (`db/legacy.py`),
   then renamed to `data/docs.migrated-<timestamp>`.
 - `data/` is gitignored and holds the user's real letters.

@@ -16,6 +16,7 @@ from typing import Any
 from .db import blobs
 from .db import connection as db
 
+TRASH_DAYS = 30  # how long a trashed document is kept before it is deleted for good
 JSON_PAGE_FIELDS = ("corners", "detected", "lines", "pdf_lines")
 
 
@@ -25,6 +26,7 @@ def init(data_dir: Path) -> None:
     blobs.init(data_dir / "blobs")
     from .db.legacy import migrate_json_docs
     migrate_json_docs(data_dir)
+    purge_trash(TRASH_DAYS * 86400)
 
 
 def new_id() -> str:
@@ -48,6 +50,7 @@ def _docs_from_rows(rows: Iterable) -> list[dict[str, Any]]:
         "id": r["id"], "name": r["name"], "name_source": r["name_source"], "created": r["created"],
         "status": r["status"], "progress": json.loads(r["progress"]) if r["progress"] else None,
         "error": r["error"], "outputs": {}, "pages": [], "folder_id": r["folder_id"], "tags": [],
+        "deleted_at": r["deleted_at"],
     } for r in rows]
     if not docs:
         return docs
@@ -72,9 +75,12 @@ def load_doc(doc_id: str) -> dict[str, Any]:
     return _docs_from_rows(rows)[0]
 
 
-def list_docs(folder: str | None = None, tag: str | None = None) -> list[dict[str, Any]]:
-    """All documents, newest first. folder: a folder id, or "none" for unfiled. tag: a tag id."""
-    where, args = [], []
+def list_docs(folder: str | None = None, tag: str | None = None, trashed: bool = False) -> list[dict[str, Any]]:
+    """All documents, newest first. folder: a folder id, or "none" for unfiled. tag: a tag id.
+
+    Trashed documents are left out unless trashed=True, which returns only them (latest first).
+    """
+    where, args = ["deleted_at IS NOT NULL" if trashed else "deleted_at IS NULL"], []
     if folder == "none":
         where.append("folder_id IS NULL")
     elif folder:
@@ -83,7 +89,7 @@ def list_docs(folder: str | None = None, tag: str | None = None) -> list[dict[st
     if tag:
         where.append("id IN (SELECT doc_id FROM document_tags WHERE tag_id = ?)")
         args.append(tag)
-    sql = "SELECT * FROM documents" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY created DESC"
+    sql = "SELECT * FROM documents WHERE " + " AND ".join(where) + (" ORDER BY deleted_at DESC" if trashed else " ORDER BY created DESC")
     return _docs_from_rows(db.conn().execute(sql, args).fetchall())
 
 
@@ -146,7 +152,42 @@ def update_doc(doc_id: str, **fields: Any) -> dict[str, Any]:
     return doc
 
 
+def trash_doc(doc_ids: list[str]) -> None:
+    """Move documents to the trash. Nothing is deleted: restore_docs brings them back."""
+    with db.transaction() as c:
+        c.executemany("UPDATE documents SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL",
+                      [(time.time(), i) for i in doc_ids])
+
+
+def restore_docs(doc_ids: list[str]) -> None:
+    with db.transaction() as c:
+        c.executemany("UPDATE documents SET deleted_at = NULL WHERE id = ?", [(i,) for i in doc_ids])
+
+
+def purge_trash(older_than: float = 0, doc_ids: list[str] | None = None) -> int:
+    """Delete trashed documents for good (those trashed more than `older_than` seconds ago, or the given ids)."""
+    cutoff = time.time() - older_than
+    with db.transaction() as c:
+        rows = c.execute("SELECT id FROM documents WHERE deleted_at IS NOT NULL AND deleted_at <= ?", (cutoff,)).fetchall()
+        ids = [r["id"] for r in rows if doc_ids is None or r["id"] in doc_ids]
+        c.executemany("DELETE FROM documents WHERE id = ?", [(i,) for i in ids])
+    if ids:
+        collect_garbage()
+    return len(ids)
+
+
+def trash_pages(source_id: str, page_ids: list[str]) -> str:
+    """Keep deleted pages: they go to the trash as a document of their own, and the caller then removes
+    them from the source. Restoring that document gives the pages back as a separate document."""
+    count = len(page_ids)
+    name = f"{load_doc(source_id)['name']} (deleted page{'s' if count != 1 else ''})"
+    (doc,) = create_documents_from_pages(source_id, [{"page_ids": page_ids, "name": name}])
+    trash_doc([doc["id"]])
+    return doc["id"]
+
+
 def delete_doc(doc_id: str) -> None:
+    """Delete a document for good (the trash calls this through purge_trash; the app itself uses trash_doc)."""
     with db.transaction() as c:
         c.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
     collect_garbage()
@@ -157,6 +198,36 @@ def collect_garbage() -> int:
     with db.transaction() as c:
         c.execute("DELETE FROM previews WHERE page_id NOT IN (SELECT id FROM pages)")
     return blobs.gc()
+
+
+def create_documents_from_pages(source_id: str, groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """New documents holding COPIES of pages of `source_id`; the source is left untouched.
+
+    groups: [{page_ids: [...], name: str, name_source: "ai" | "manual"}]. A copy gets a new page id but shares
+    the photo and cleaned-image blobs and keeps the OCR, crop and filter, so nothing is read or processed
+    again. The new documents get the source's folder and tags. All or nothing: a bad page id creates nothing.
+    """
+    with db.transaction() as c:
+        source = load_doc(source_id)
+        by_id = {p["id"]: p for p in source["pages"]}
+        created = []
+        for n, group in enumerate(groups, 1):
+            ids = group["page_ids"]
+            if not ids or len(set(ids)) != len(ids):
+                raise ValueError("each document needs its pages listed once")
+            missing = [i for i in ids if i not in by_id]
+            if missing:
+                raise KeyError(missing[0])
+            name = (group.get("name") or "").strip()[:120]
+            doc = create_doc(name or f"{source['name']} (part {n})",
+                             group.get("name_source", "manual") if name else "manual")
+            doc["pages"] = [{**by_id[i], "id": new_id()} for i in ids]
+            doc["folder_id"] = source["folder_id"]
+            save_doc(doc)
+            c.execute("INSERT INTO document_tags (doc_id, tag_id) SELECT ?, tag_id FROM document_tags WHERE doc_id = ?",
+                      (doc["id"], source_id))
+            created.append(doc["id"])
+    return [load_doc(i) for i in created]
 
 
 def find_page(doc: dict[str, Any], page_id: str) -> dict[str, Any]:

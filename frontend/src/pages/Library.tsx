@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import {
-  Camera, FileText, Files, Folder, FolderInput, Inbox, Languages, Menu, Pencil, Plus, Settings, Smartphone, Sparkles, Square,
+  Camera, FileText, Files, Folder, FolderInput, Inbox, Languages, Menu, Pencil, Plus, RotateCcw, Settings, Smartphone, Sparkles, Square,
   SquareCheck, Tag as TagIcon, Trash2, X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -16,12 +16,14 @@ const isPhone = matchMedia("(pointer: coarse)").matches;
 function inView(d: Doc, v: LibraryView) {
   if (v.kind === "unfiled") return !d.folder_id;
   if (v.kind === "folder") return d.folder_id === v.id;
+  if (v.kind === "trash") return false;
   if (v.kind === "tag") return d.tags.some((t) => t.id === v.id);
   return true;
 }
 
 export default function Library({ view }: { view: LibraryView }) {
   const [docs, setDocs] = useState<Doc[] | null>(null);
+  const [trashed, setTrashed] = useState<Doc[]>([]);
   const [folders, setFolders] = useState<FolderT[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [colors, setColors] = useState<string[]>([]);
@@ -32,8 +34,9 @@ export default function Library({ view }: { view: LibraryView }) {
 
   const loadLibrary = useCallback(async () => {
     try {
-      const [d, f, t] = await Promise.all([api.listDocs(), api.listFolders(), api.listTags()]);
+      const [d, f, t, bin] = await Promise.all([api.listDocs(), api.listFolders(), api.listTags(), api.listDocs({ kind: "trash" })]);
       setDocs(d);
+      setTrashed(bin);
       setFolders(f);
       setTags(t.tags);
       setColors(t.colors);
@@ -65,7 +68,7 @@ export default function Library({ view }: { view: LibraryView }) {
     });
   }, []);
 
-  const shown = useMemo(() => (docs ?? []).filter((d) => inView(d, view)), [docs, view]);
+  const shown = useMemo(() => (view.kind === "trash" ? trashed : (docs ?? []).filter((d) => inView(d, view))), [docs, trashed, view]);
   const folderName = useMemo(() => new Map(folders.map((f) => [f.id, f.name])), [folders]);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -96,6 +99,7 @@ export default function Library({ view }: { view: LibraryView }) {
   const title =
     view.kind === "all" ? { icon: <Files />, text: "All documents" }
     : view.kind === "unfiled" ? { icon: <Inbox />, text: "Unfiled" }
+    : view.kind === "trash" ? { icon: <Trash2 />, text: "Trash" }
     : view.kind === "folder" ? { icon: <Folder />, text: folderName.get(view.id) ?? "Folder" }
     : { icon: <TagIcon />, text: tags.find((t) => t.id === view.id)?.name ?? "Tag" };
 
@@ -115,7 +119,7 @@ export default function Library({ view }: { view: LibraryView }) {
         <div className="drawer-backdrop" onClick={() => setDrawer(false)} />
         <aside className="lib-side">
           <Sidebar view={view} folders={folders} tags={tags} colors={colors} total={docs?.length ?? 0}
-            unfiled={(docs ?? []).filter((d) => !d.folder_id).length} onChanged={loadLibrary} onError={setError}
+            unfiled={(docs ?? []).filter((d) => !d.folder_id).length} trashed={trashed.length} onChanged={loadLibrary} onError={setError}
             onDropDocs={(folderId, dropped) => act(() => api.bulk(dropped, "move", { folder_id: folderId }))} />
           {qr && (
             <details className="qr-card">
@@ -135,13 +139,30 @@ export default function Library({ view }: { view: LibraryView }) {
             <h2 className="with-icon lib-title">
               {title.icon} {title.text} <span className="muted small">{shown.length}</span>
             </h2>
-            <button className="btn primary" onClick={newScan}>
-              <Plus /> New scan
-            </button>
+            {view.kind === "trash" ? (
+              <button className="btn danger" disabled={!trashed.length}
+                onClick={() => window.confirm(`Delete ${trashed.length} document${trashed.length === 1 ? "" : "s"} for good? This cannot be undone.`)
+                  && act(() => api.emptyTrash())}>
+                <Trash2 /> Empty trash
+              </button>
+            ) : (
+              <button className="btn primary" onClick={newScan}>
+                <Plus /> New scan
+              </button>
+            )}
           </div>
 
           {error && <p className="error">{error}</p>}
-          {docs && shown.length === 0 && (
+          {view.kind === "trash" && shown.length > 0 && (
+            <p className="muted small">Documents in the trash are deleted for good after 30 days.</p>
+          )}
+          {docs && shown.length === 0 && view.kind === "trash" && (
+            <div className="empty-state lib-empty">
+              <Trash2 />
+              <p>The trash is empty.</p>
+            </div>
+          )}
+          {docs && shown.length === 0 && view.kind !== "trash" && (
             <div className="empty-state lib-empty">
               {title.icon}
               <p>{docs.length === 0 ? "No documents yet. Start with New scan." : "Nothing here yet. Drag documents onto a folder to file them."}</p>
@@ -149,7 +170,12 @@ export default function Library({ view }: { view: LibraryView }) {
           )}
 
           <ul className="doc-grid">
-            {shown.map((d) => (
+            {shown.map((d) => view.kind === "trash" ? (
+              <TrashCard key={d.id} doc={d}
+                onRestore={() => act(() => api.bulk([d.id], "restore"))}
+                onPurge={() => window.confirm(`Delete "${d.name}" for good? This cannot be undone.`)
+                  && act(() => api.bulk([d.id], "purge"))} />
+            ) : (
               <DocCard key={d.id} doc={d} folderName={view.kind !== "folder" && d.folder_id ? folderName.get(d.folder_id) : undefined}
                 selected={selected.has(d.id)} selecting={selected.size > 0} onToggle={() => toggle(d.id)}
                 dragIds={selected.has(d.id) ? ids : [d.id]} onError={setError}
@@ -165,7 +191,7 @@ export default function Library({ view }: { view: LibraryView }) {
           onSelectAll={() => setSelected(new Set(shown.map((d) => d.id)))}
           onMove={(folderId) => act(() => api.bulk(ids, "move", { folder_id: folderId }))}
           onTag={(tagId) => act(() => api.bulk(ids, "tag", { tag_id: tagId }))}
-          onDelete={() => window.confirm(`Delete ${ids.length} document${ids.length === 1 ? "" : "s"} and all their pages?`)
+          onDelete={() => window.confirm(`Move ${ids.length} document${ids.length === 1 ? "" : "s"} to the trash?`)
             && act(async () => {
               await api.bulk(ids, "delete");
               setSelected(new Set());
@@ -203,12 +229,35 @@ function BulkBar(p: {
         </select>
       </label>
       <button className="btn small danger" onClick={p.onDelete}>
-        <Trash2 /> Delete
+        <Trash2 /> Move to trash
       </button>
       <button className="icon-btn" onClick={p.onClear} aria-label="Clear selection" title="Clear selection">
         <X />
       </button>
     </div>
+  );
+}
+
+function TrashCard({ doc: d, onRestore, onPurge }: { doc: Doc; onRestore: () => void; onPurge: () => void }) {
+  const first = d.pages[0];
+  const left = Math.max(0, 30 - Math.floor((Date.now() / 1000 - (d.deleted_at ?? 0)) / 86400));
+  return (
+    <li className="tile card">
+      <div className="tile-thumb">
+        {first ? <img src={previewUrl(d.id, first, 400)} alt="" draggable={false} loading="lazy" />
+          : <div className="tile-empty"><FileText /><span>No pages</span></div>}
+      </div>
+      <div className="tile-body">
+        <span className="tile-title" title={d.name}>{d.name}</span>
+        <div className="tile-meta">
+          {d.pages.length} page{d.pages.length === 1 ? "" : "s"} · deleted for good in {left} day{left === 1 ? "" : "s"}
+        </div>
+      </div>
+      <div className="tile-foot">
+        <button className="btn small" onClick={onRestore}><RotateCcw /> Restore</button>
+        <button className="btn small danger" onClick={onPurge}><Trash2 /> Delete forever</button>
+      </div>
+    </li>
   );
 }
 

@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from .. import jobs, library, storage
-from ..ai import naming
+from ..ai import naming, sort
 from ..db import blobs
 from ..ocr.pdf_text import page_lines
 from ..scan.detect import FULL_IMAGE, detect_corners
@@ -59,6 +59,20 @@ def _mark_dirty(doc: dict) -> None:
         doc["status"] = "draft"
 
 
+class SortGroup(BaseModel):
+    page_ids: list[str] = Field(min_length=1)
+    name: str = ""
+    name_source: Literal["ai", "manual"] = "manual"
+
+
+class ApplySort(BaseModel):
+    groups: list[SortGroup] = Field(min_length=1, max_length=sort.MAX_PAGES)
+
+
+class RemovePages(BaseModel):
+    page_ids: list[str] = Field(min_length=1)
+
+
 class NewDoc(BaseModel):
     name: str = ""
 
@@ -74,7 +88,7 @@ class DocPatch(BaseModel):
 
 class BulkAction(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=500)
-    action: Literal["move", "tag", "untag", "delete"]
+    action: Literal["move", "tag", "untag", "delete", "restore", "purge"]  # delete = to the trash
     folder_id: str | None = None
     tag_id: str | None = None
 
@@ -86,9 +100,9 @@ class PagePatch(BaseModel):
 
 
 @router.get("")
-def list_docs(folder: str | None = None, tag: str | None = None):
-    """folder: a folder id or "none" (unfiled); tag: a tag id."""
-    return storage.list_docs(folder=folder, tag=tag)
+def list_docs(folder: str | None = None, tag: str | None = None, trash: bool = False):
+    """folder: a folder id or "none" (unfiled); tag: a tag id; trash: only the trashed documents."""
+    return storage.list_docs(folder=folder, tag=tag, trashed=trash)
 
 
 @router.post("/bulk")
@@ -100,12 +114,17 @@ def bulk(body: BulkAction):
             if not body.tag_id:
                 raise HTTPException(400, "tag_id is required")
             (library.add_tag if body.action == "tag" else library.remove_tag)(body.ids, body.tag_id)
-        else:
+        elif body.action == "restore":
+            storage.restore_docs(body.ids)
+        elif body.action == "purge":  # for good: only documents that are in the trash, or that a sort just made
             for doc_id in body.ids:
-                doc = _doc(doc_id)
-                _editable(doc)
+                _editable(_doc(doc_id))
             for doc_id in body.ids:
                 storage.delete_doc(doc_id)
+        else:
+            for doc_id in body.ids:
+                _editable(_doc(doc_id))
+            storage.trash_doc(body.ids)
     except library.LibraryError as e:
         raise HTTPException(400, str(e))
     return {"ok": True}
@@ -146,11 +165,20 @@ def patch_doc(doc_id: str, body: DocPatch):
 
 
 @router.delete("/{doc_id}")
-def delete_doc(doc_id: str):
+def delete_doc(doc_id: str, permanent: bool = False):
+    """Move to the trash; permanent=true deletes for good."""
     doc = _doc(doc_id)
     _editable(doc)
-    storage.delete_doc(doc_id)
+    if permanent:
+        storage.delete_doc(doc_id)
+    else:
+        storage.trash_doc([doc_id])
     return {"ok": True}
+
+
+@router.post("/trash/empty")
+def empty_trash():
+    return {"deleted": storage.purge_trash()}
 
 
 def _new_page(doc_id: str, img, source: str = "photo") -> dict:
@@ -224,7 +252,23 @@ def patch_page(doc_id: str, page_id: str, body: PagePatch):
 def delete_page(doc_id: str, page_id: str):
     with _edit(doc_id) as doc:
         _editable(doc)
-        doc["pages"].remove(_page(doc, page_id))
+        page = _page(doc, page_id)
+        storage.trash_pages(doc_id, [page_id])
+        doc["pages"].remove(page)
+        _mark_dirty(doc)
+    storage.collect_garbage()
+    return doc
+
+
+@router.post("/{doc_id}/remove-pages")
+def remove_pages(doc_id: str, body: RemovePages):
+    """Remove several pages at once, e.g. the ones just copied into new documents by a sort."""
+    with _edit(doc_id) as doc:
+        _editable(doc)
+        pages = [_page(doc, pid) for pid in dict.fromkeys(body.page_ids)]
+        storage.trash_pages(doc_id, [p["id"] for p in pages])
+        for page in pages:
+            doc["pages"].remove(page)
         _mark_dirty(doc)
     storage.collect_garbage()
     return doc
@@ -280,6 +324,43 @@ def autodetect(doc_id: str, page_id: str):
         page["corners"] = page["detected"] = corners
         _mark_dirty(doc)
     return page
+
+
+@router.post("/{doc_id}/sort-pages")
+def sort_pages(doc_id: str, split: bool = True):
+    """Propose how the pages belong together and in what order. Read-only: nothing is changed.
+
+    split=false only orders the pages (they all belong to one document). Takes a while: every page is read
+    and described by the model. Reading the pages stores their OCR, so translating later reuses it.
+    """
+    doc = _doc(doc_id)
+    _editable(doc)  # the worker is using the pages
+    if len(doc["pages"]) < 2:
+        raise HTTPException(400, "add at least two pages first")
+    try:
+        return sort.propose(doc_id, split)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    except httpx.HTTPError as e:
+        raise HTTPException(502, f"Ollama is not reachable: {e}")
+
+
+@router.get("/{doc_id}/sort-progress")
+def sort_progress(doc_id: str):
+    """What a running sort-pages call is doing, for the progress bar; {} when none is running."""
+    return sort.progress(doc_id) or {}
+
+
+@router.post("/{doc_id}/apply-sort")
+def apply_sort(doc_id: str, body: ApplySort):
+    """Create a new document for each group, holding copies of its pages. The original stays as it is."""
+    _editable(_doc(doc_id))
+    try:
+        return {"documents": storage.create_documents_from_pages(doc_id, [g.model_dump() for g in body.groups])}
+    except KeyError:
+        raise HTTPException(400, "a page does not belong to this document")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/{doc_id}/suggest-name")

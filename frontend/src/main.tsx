@@ -25,6 +25,7 @@ function App() {
   if (view === "settings") return <SettingsPage />;
   if (view === "folder" && id) return <Library view={{ kind: "folder", id }} />;
   if (view === "tag" && id) return <Library view={{ kind: "tag", id }} />;
+  if (view === "trash") return <Library view={{ kind: "trash" }} />;
   if (view === "unfiled") return <Library view={{ kind: "unfiled" }} />;
   return <Library view={{ kind: "all" }} />;
 }

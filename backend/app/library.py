@@ -19,7 +19,7 @@ def list_folders() -> list[dict[str, Any]]:
     """Flat list (the client builds the tree), each with the number of documents directly inside."""
     rows = db.conn().execute(
         """SELECT f.id, f.parent_id, f.name, f.position,
-                  (SELECT COUNT(*) FROM documents d WHERE d.folder_id = f.id) AS count
+                  (SELECT COUNT(*) FROM documents d WHERE d.folder_id = f.id AND d.deleted_at IS NULL) AS count
            FROM folders f ORDER BY f.position, f.name COLLATE NOCASE"""
     ).fetchall()
     return [dict(r) for r in rows]
@@ -90,8 +90,9 @@ def delete_folder(folder_id: str) -> None:
 
 def list_tags() -> list[dict[str, Any]]:
     rows = db.conn().execute(
-        """SELECT t.id, t.name, t.color, COUNT(dt.doc_id) AS count
+        """SELECT t.id, t.name, t.color, COUNT(d.id) AS count
            FROM tags t LEFT JOIN document_tags dt ON dt.tag_id = t.id
+           LEFT JOIN documents d ON d.id = dt.doc_id AND d.deleted_at IS NULL
            GROUP BY t.id ORDER BY t.name COLLATE NOCASE"""
     ).fetchall()
     return [dict(r) for r in rows]

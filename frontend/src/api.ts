@@ -40,7 +40,26 @@ export interface Tag {
 }
 
 /** Which documents the library shows. */
-export type LibraryView = { kind: "all" } | { kind: "unfiled" } | { kind: "folder"; id: string } | { kind: "tag"; id: string };
+export type LibraryView = { kind: "all" } | { kind: "unfiled" } | { kind: "folder"; id: string } | { kind: "tag"; id: string } | { kind: "trash" };
+
+export type Confidence = "high" | "medium" | "low";
+
+/** One proposed document: its pages in the proposed order. `positions` are the pages' numbers in the batch. */
+export interface SortGroup {
+  page_ids: string[];
+  positions: number[];
+  confidence: Confidence;
+  reason: string;
+  name: string;
+  order_from_markers: boolean;
+}
+
+export interface SortProposal {
+  groups: SortGroup[];
+  unplaced: { page_id: string; position: number; why: string }[];
+  message: string | null;
+  split: boolean;
+}
 
 export interface Doc {
   id: string;
@@ -49,6 +68,7 @@ export interface Doc {
   folder_id: string | null;
   tags: Tag[];
   created: number;
+  deleted_at?: number | null;
   pages: Page[];
   status: Status;
   progress: { step: string; done: number; total: number } | null;
@@ -98,12 +118,13 @@ const d = (id: string) => `/api/docs/${id}`;
 export const api = {
   listDocs: (view: LibraryView = { kind: "all" }) => {
     const q = view.kind === "folder" ? `?folder=${view.id}` : view.kind === "unfiled" ? "?folder=none"
-      : view.kind === "tag" ? `?tag=${view.id}` : "";
+      : view.kind === "tag" ? `?tag=${view.id}` : view.kind === "trash" ? "?trash=true" : "";
     return req<Doc[]>("GET", `/api/docs${q}`);
   },
+  emptyTrash: () => req<{ deleted: number }>("POST", "/api/docs/trash/empty"),
   moveDoc: (id: string, folder_id: string | null) => req<Doc>("PATCH", d(id), { folder_id }),
   setDocTags: (id: string, tags: string[]) => req<Doc>("PATCH", d(id), { tags }),
-  bulk: (ids: string[], action: "move" | "tag" | "untag" | "delete", extra: { folder_id?: string | null; tag_id?: string } = {}) =>
+  bulk: (ids: string[], action: "move" | "tag" | "untag" | "delete" | "restore" | "purge", extra: { folder_id?: string | null; tag_id?: string } = {}) =>
     req<{ ok: boolean }>("POST", "/api/docs/bulk", { ids, action, ...extra }),
   listFolders: () => req<Folder[]>("GET", "/api/folders"),
   createFolder: (name: string, parent_id: string | null = null) => req<Folder>("POST", "/api/folders", { name, parent_id }),
@@ -118,6 +139,10 @@ export const api = {
   getDoc: (id: string) => req<Doc>("GET", d(id)),
   renameDoc: (id: string, name: string, name_source: "manual" | "ai" = "manual") =>
     req<Doc>("PATCH", d(id), { name, name_source }),
+  sortPages: (id: string, split = true) => req<SortProposal>("POST", `${d(id)}/sort-pages?split=${split}`),
+  sortProgress: (id: string) => req<{ stage?: string; done?: number; total?: number }>("GET", `${d(id)}/sort-progress`),
+  applySort: (id: string, groups: { page_ids: string[]; name: string; name_source: "ai" | "manual" }[]) =>
+    req<{ documents: Doc[] }>("POST", `${d(id)}/apply-sort`, { groups }),
   suggestName: (id: string) => req<NameSuggestion>("POST", `${d(id)}/suggest-name`),
   reorder: (id: string, page_order: string[]) => req<Doc>("PATCH", d(id), { page_order }),
   deleteDoc: (id: string) => req<{ ok: boolean }>("DELETE", d(id)),
@@ -134,6 +159,7 @@ export const api = {
   patchPage: (id: string, pid: string, patch: Partial<Pick<Page, "corners" | "rotation" | "filter">>) =>
     req<Page>("PATCH", `${d(id)}/pages/${pid}`, patch),
   autodetect: (id: string, pid: string) => req<Page>("POST", `${d(id)}/pages/${pid}/autodetect`),
+  removePages: (id: string, page_ids: string[]) => req<Doc>("POST", `${d(id)}/remove-pages`, { page_ids }),
   deletePage: (id: string, pid: string) => req<Doc>("DELETE", `${d(id)}/pages/${pid}`),
   process: (id: string) => req<Doc>("POST", `${d(id)}/process`),
   getSettings: () => req<Settings>("GET", "/api/settings"),

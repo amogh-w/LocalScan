@@ -14,13 +14,14 @@ interface Props {
   colors: string[];
   total: number;
   unfiled: number;
+  trashed: number;
   onChanged: () => void;                                   // folders/tags changed: reload
   onDropDocs: (folderId: string | null, docIds: string[]) => void;
   onError: (message: string) => void;
 }
 
 const href = (v: LibraryView) =>
-  v.kind === "all" ? "#/" : v.kind === "unfiled" ? "#/unfiled" : `#/${v.kind}/${v.id}`;
+  v.kind === "all" ? "#/" : v.kind === "unfiled" ? "#/unfiled" : v.kind === "trash" ? "#/trash" : `#/${v.kind}/${v.id}`;
 const same = (a: LibraryView, b: LibraryView) => a.kind === b.kind && ("id" in a ? a.id : "") === ("id" in b ? b.id : "");
 
 function useDrop(onDrop: (ids: string[]) => void) {
@@ -63,6 +64,7 @@ export default function Sidebar(p: Props) {
         <SideLink view={{ kind: "all" }} current={p.view} icon={<Files />} label="All documents" count={p.total} />
         <DropLink view={{ kind: "unfiled" }} current={p.view} icon={<Inbox />} label="Unfiled" count={p.unfiled}
           onDrop={(ids) => p.onDropDocs(null, ids)} />
+        <SideLink view={{ kind: "trash" }} current={p.view} icon={<Trash2 />} label="Trash" count={p.trashed} />
       </div>
 
       <div className="side-group">

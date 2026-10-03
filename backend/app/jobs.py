@@ -86,20 +86,29 @@ def prepare_page(doc_id: str, page: dict, ocr: _OcrHolder) -> np.ndarray:
     return img
 
 
-def document_pages_text(doc_id: str) -> list[str]:
-    """Reading-order text of every page, OCR'ing pages that aren't read yet (used for AI naming on request)."""
+def read_pages(doc_id: str) -> list[dict]:
+    """Every page of the document with its OCR, reading the pages that aren't read yet.
+
+    Used by the AI helpers (naming, sorting) that run on request. The OCR is stored back, so translating
+    later doesn't redo it. The returned pages are in document order and carry their `lines`.
+    """
     pages = storage.load_doc(doc_id)["pages"]
     ocr = _OcrHolder()
     for page in pages:
         prepare_page(doc_id, page, ocr)
-    with storage.editing(doc_id) as fresh:  # keep the OCR so translating later doesn't redo it
+    with storage.editing(doc_id) as fresh:
         read = {p["id"]: p for p in pages}
         for p in fresh["pages"]:
             mine = read.get(p["id"])
             # Skip pages that were re-cropped or re-filtered while we were reading them.
             if mine and clean_key(p) == mine["clean_key"]:
                 p.update(clean=mine["clean"], clean_key=mine["clean_key"], ocr_key=mine["ocr_key"], lines=mine["lines"])
-    return page_texts(pages)
+    return pages
+
+
+def document_pages_text(doc_id: str) -> list[str]:
+    """Reading-order text of every page, OCR'ing pages that aren't read yet."""
+    return page_texts(read_pages(doc_id))
 
 
 def page_texts(pages: list[dict]) -> list[str]:
