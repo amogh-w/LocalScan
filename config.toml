@@ -1,0 +1,31 @@
+[server]
+host = "0.0.0.0"
+port = 8010          # 8000 is taken by the PaddleOCR server in Projects/Paddle
+data_dir = "data"
+
+[ocr]
+engine = "paddle_local"   # "paddle_local" (in-process, needs: uv sync --extra paddle) or "paddle_http"
+
+[ocr.paddle_local]
+lang = ""            # empty = PaddleOCR default models (the PP-OCRv6 ones already in ~/.paddlex)
+device = "gpu"
+
+[ocr.paddle_http]
+url = "http://localhost:8000/ocr"
+# How to send the image:
+#   "multipart" - form field "file" (Projects/Paddle server.py)
+#   "paddlex"   - PaddleX serving, JSON {"file": <b64>, "fileType": 1}
+#   "paddlehub" - PaddleHub serving, JSON {"images": [<b64>]}
+request = "multipart"
+timeout = 120
+
+[translator]
+engine = "ollama"
+source_lang = "German"
+target_lang = "English"
+
+[translator.ollama]
+url = "http://localhost:11434"
+model = ""          # empty = first installed model; change it on the Settings page
+temperature = 0.1
+timeout = 600
