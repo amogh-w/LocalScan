@@ -2,9 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Camera, ChevronLeft, ChevronRight, Contrast, Crop, Eye, FileUp, Image,
   Images, Languages, LayoutGrid, ListOrdered, LoaderCircle, Maximize, Palette, RotateCcw, RotateCw, ScanSearch, ScanText,
-  SlidersHorizontal, Sparkles, Split, Trash2, Undo2, X, type LucideIcon,
+  FilePlus, Folder as FolderIcon, FolderInput, FolderOpen, Inbox, SlidersHorizontal, Sparkles, Split, Trash2, Undo2, X, type LucideIcon,
 } from "lucide-react";
-import { api, imageUrl, prepareImage, previewUrl, type Doc, type Filter, type Page, type Point } from "../api";
+import { api, flattenFolders, imageUrl, prepareImage, previewUrl, type Doc, type Filter, type Folder, type Page, type Point } from "../api";
+import ContextMenu, { type MenuItem } from "../components/ContextMenu";
 import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
 import NameOptions from "../components/NameOptions";
@@ -43,6 +44,12 @@ export default function DocPage({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<"split" | "order" | null>(null);
   const [sorted, setSorted] = useState<SortResult | null>(null);
+  // Several pages can be picked (Ctrl/Cmd-click, Shift-click); the right-click menu acts on the picked pages.
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const anchor = useRef<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
+  const [folders, setFolders] = useState<Folder[] | null>(null);
+  const [moved, setMoved] = useState<{ doc: Doc; ids: string[]; positions: number[]; where: string } | null>(null);
   const dragFrom = useRef<number | null>(null);
   // Page edits are sent one at a time, in order; only the newest reply updates the screen.
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -61,6 +68,18 @@ export default function DocPage({ id }: { id: string }) {
     run(() => api.getDoc(id).then(setDoc));
   }, [id, run]);
 
+  // Escape clears the picked pages (a hook, so it must stay above the early return below).
+  useEffect(() => {
+    if (!picked.size) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setPicked(new Set());
+      anchor.current = null;
+    };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [picked.size]);
+
   // Poll while the backend is working.
   const busy = doc?.status === "queued" || doc?.status === "processing";
   useEffect(() => {
@@ -76,6 +95,7 @@ export default function DocPage({ id }: { id: string }) {
   const applied = (result: SortResult) => {
     setSorting(null);
     setSorted(result);
+    setMoved(null);
     if (result.kind === "reorder") setDoc(result.doc);
   };
 
@@ -168,6 +188,90 @@ export default function DocPage({ id }: { id: string }) {
     });
   };
 
+  // --- picking pages and the right-click menu ---------------------------------------------------
+  const clearPicked = () => {
+    setPicked(new Set());
+    anchor.current = null;
+  };
+
+  const clickThumb = (e: React.MouseEvent, p: Page) => {
+    const from = anchor.current ?? selected; // a range starts at the last clicked page, else the open one
+    if (e.shiftKey && from) {
+      const ids = doc.pages.map((q) => q.id);
+      const [a, b] = [ids.indexOf(from), ids.indexOf(p.id)].sort((m, n) => m - n);
+      setPicked(new Set(ids.slice(a, b + 1)));
+    } else if (e.ctrlKey || e.metaKey) {
+      const next = new Set(picked);
+      if (next.has(p.id)) next.delete(p.id);
+      else next.add(p.id);
+      setPicked(next);
+      anchor.current = p.id;
+    } else {
+      clearPicked();
+      anchor.current = p.id;
+      openPage(p.id);
+    }
+  };
+
+  /** The pages an action applies to, in document order: the picked pages, or just the one under the pointer. */
+  const targets = (p: Page) => {
+    const chosen = picked.has(p.id) ? picked : new Set([p.id]);
+    if (!picked.has(p.id)) {
+      setPicked(chosen);
+      anchor.current = p.id;
+    }
+    return doc.pages.filter((q) => chosen.has(q.id)).map((q) => q.id);
+  };
+
+  const openMenu = (x: number, y: number, ids: string[]) => {
+    if (busy) return;
+    if (!folders) api.listFolders().then(setFolders).catch(() => setFolders([]));
+    setMenu({ x, y, ids });
+  };
+
+  const movePagesTo = (ids: string[], folder: string | null | undefined, where: string) =>
+    run(async () => {
+      await saveQueue.current;
+      const out = await api.movePages(id, ids, folder);
+      setDoc(out.source);
+      clearPicked();
+      setSorted(null);
+      setMoved({ doc: out.document, ids, positions: out.positions, where });
+    });
+
+  const undoMove = () => run(async () => {
+    if (!moved) return;
+    setDoc(await api.returnPages(id, moved.ids, moved.doc.id, moved.positions));
+    setMoved(null);
+  });
+
+  const deletePages = async (ids: string[]) => {
+    if (!window.confirm(`Move ${ids.length === 1 ? "this page" : `these ${ids.length} pages`} to the trash?`)) return;
+    await run(async () => {
+      setDoc(await api.removePages(id, ids));
+      clearPicked();
+    });
+  };
+
+  const menuItems = (ids: string[]): MenuItem[] => {
+    const many = ids.length > 1;
+    const noun = many ? `${ids.length} pages` : "page";
+    const tree = flattenFolders(folders ?? []);
+    return [
+      { label: `New scan from ${noun}`, icon: <FilePlus />, onSelect: () => movePagesTo(ids, undefined, "a new scan") },
+      {
+        label: "Move to folder", icon: <FolderInput />,
+        children: [
+          { label: "Same folder as this document", icon: <FolderOpen />, onSelect: () => movePagesTo(ids, undefined, "this document's folder") },
+          { label: "Unfiled", icon: <Inbox />, onSelect: () => movePagesTo(ids, null, "Unfiled") },
+          ...tree.map((f) => ({ label: f.name, depth: f.depth, icon: <FolderIcon />, onSelect: () => movePagesTo(ids, f.id, f.name) })),
+          ...(folders && !tree.length ? [{ label: "No folders yet", disabled: true }] : []),
+        ],
+      },
+      { label: `Delete ${noun}`, icon: <Trash2 />, danger: true, onSelect: () => deletePages(ids) },
+    ];
+  };
+
   const openPage = (pageId: string) => {
     setSelected(pageId);
     setTab("page");
@@ -210,7 +314,21 @@ export default function DocPage({ id }: { id: string }) {
         <aside className="panel pages-panel">
           <div className="panel-head">
             <h2>Pages</h2>
-            <span className="muted small">{doc.pages.length}</span>
+            {picked.size > 0 ? (
+              <span className="picked-bar">
+                <span className="small">{picked.size} selected</span>
+                <button className="btn small" disabled={busy} aria-haspopup="menu"
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    openMenu(r.left, r.bottom + 4, doc.pages.filter((q) => picked.has(q.id)).map((q) => q.id));
+                  }}>
+                  Actions
+                </button>
+                <button className="icon-btn" onClick={clearPicked} aria-label="Clear selection" title="Clear selection (Esc)"><X /></button>
+              </span>
+            ) : (
+              <span className="muted small">{doc.pages.length}</span>
+            )}
           </div>
           {addButtons}
           {uploading && (
@@ -227,8 +345,13 @@ export default function DocPage({ id }: { id: string }) {
               {doc.pages.map((p, i) => (
                 <button
                   key={p.id}
-                  className={`thumb${p.id === selected ? " selected" : ""}`}
-                  onClick={() => openPage(p.id)}
+                  className={`thumb${p.id === selected ? " selected" : ""}${picked.has(p.id) ? " picked" : ""}`}
+                  onClick={(e) => clickThumb(e, p)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    openMenu(e.clientX, e.clientY, targets(p));
+                  }}
+                  aria-pressed={picked.has(p.id) || undefined}
                   draggable={!busy}
                   onDragStart={() => (dragFrom.current = i)}
                   onDragOver={(e) => e.preventDefault()}
@@ -395,7 +518,16 @@ export default function DocPage({ id }: { id: string }) {
       </div>
 
       {sorting && <SortPages doc={doc} split={sorting === "split"} onClose={() => setSorting(null)} onApplied={applied} />}
-      {sorted && (
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.ids)} onClose={() => setMenu(null)} />}
+      {moved && (
+        <div className="toast" role="status">
+          <span>Moved {moved.ids.length === 1 ? "1 page" : `${moved.ids.length} pages`} to {moved.where === "a new scan" ? "a new scan" : moved.where}.</span>
+          <a className="btn small" href={`#/doc/${moved.doc.id}`}>Open</a>
+          <AsyncButton onClick={undoMove} icon={<Undo2 />}>Undo</AsyncButton>
+          <button className="icon-btn" onClick={() => setMoved(null)} aria-label="Dismiss" title="Dismiss"><X /></button>
+        </div>
+      )}
+      {sorted && !moved && (
         <div className="toast" role="status">
           <span>
             {sorted.kind === "split"

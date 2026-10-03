@@ -186,6 +186,11 @@ first paint, so keep the two in sync. The picker is `components/AppearancePicker
   `purge` = for good (only from the trash). Deleted pages (single delete, or removing sorted pages from the
   source) are kept too: `storage.trash_pages` stores them as a trashed document, which Restore turns
   into a separate document. Folders and tags are organisation, not content, and are deleted directly.
+- **Moving pages** (`storage.move_pages` / `return_pages`, `POST /api/docs/<id>/move-pages` and `return-pages`):
+  the right-click menu on a thumbnail (`ContextMenu.tsx`, picked pages via Ctrl/Cmd/Shift-click) moves the
+  pages out of the document into a new one in a chosen folder. It is a real move (`UPDATE pages SET doc_id`,
+  the one place a page changes document; `save_doc` never does), so ids, OCR and previews travel with the
+  page. Undo puts the pages back at their old positions. The sort feature still COPIES pages instead.
 - **Legacy data:** an old `data/docs/*/doc.json` tree is imported once on startup (`db/legacy.py`),
   then renamed to `data/docs.migrated-<timestamp>`.
 - `data/` is gitignored and holds the user's real letters.

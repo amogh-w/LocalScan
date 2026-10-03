@@ -162,6 +162,11 @@ export const api = {
   patchPage: (id: string, pid: string, patch: Partial<Pick<Page, "corners" | "rotation" | "filter">>) =>
     req<Page>("PATCH", `${d(id)}/pages/${pid}`, patch),
   autodetect: (id: string, pid: string) => req<Page>("POST", `${d(id)}/pages/${pid}/autodetect`),
+  movePages: (id: string, page_ids: string[], folder_id?: string | null) =>
+    req<{ document: Doc; positions: number[]; source: Doc }>("POST", `${d(id)}/move-pages`,
+      folder_id === undefined ? { page_ids } : { page_ids, folder_id }),
+  returnPages: (id: string, page_ids: string[], from_doc_id: string, positions: number[]) =>
+    req<Doc>("POST", `${d(id)}/return-pages`, { page_ids, from_doc_id, positions }),
   removePages: (id: string, page_ids: string[]) => req<Doc>("POST", `${d(id)}/remove-pages`, { page_ids }),
   deletePage: (id: string, pid: string) => req<Doc>("DELETE", `${d(id)}/pages/${pid}`),
   process: (id: string) => req<Doc>("POST", `${d(id)}/process`),

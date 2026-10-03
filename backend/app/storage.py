@@ -230,6 +230,85 @@ def create_documents_from_pages(source_id: str, groups: list[dict[str, Any]]) ->
     return [load_doc(i) for i in created]
 
 
+KEEP = object()  # move_pages: "leave the new document in the source's folder"
+
+
+def _page_label(positions: list[int]) -> str:
+    """"page 3", "pages 2-4" or "pages 1, 3, 5" for 0-based positions."""
+    nums = [p + 1 for p in positions]
+    if len(nums) == 1:
+        return f"page {nums[0]}"
+    if nums == list(range(nums[0], nums[-1] + 1)):
+        return f"pages {nums[0]}-{nums[-1]}"
+    return "pages " + ", ".join(map(str, nums))
+
+
+def _renumber(c, doc_id: str, order: list[str]) -> None:
+    c.executemany("UPDATE pages SET doc_id = ?, position = ? WHERE id = ?", [(doc_id, i, p) for i, p in enumerate(order)])
+
+
+def _mark_draft(c, *doc_ids: str) -> None:
+    c.executemany("UPDATE documents SET status = 'draft', updated = ? WHERE id = ? AND status IN ('done', 'error')",
+                  [(time.time(), d) for d in doc_ids])
+
+
+def move_pages(source_id: str, page_ids: list[str], folder: Any = KEEP, name: str = "") -> tuple[dict[str, Any], list[int]]:
+    """Move pages out of a document into a new one. The pages keep their ids, OCR and previews.
+
+    folder: KEEP (the source's folder), a folder id, or None (unfiled). Returns (the new document, the pages'
+    old 0-based positions in the order they were moved), which return_pages needs to undo the move. The new
+    document inherits the source's tags; both documents go back to draft. All or nothing.
+    """
+    with db.transaction() as c:
+        source = load_doc(source_id)
+        order = [p["id"] for p in source["pages"]]
+        if not page_ids or len(set(page_ids)) != len(page_ids):
+            raise ValueError("list each page once")
+        for pid in page_ids:
+            if pid not in order:
+                raise KeyError(pid)
+        if folder is not KEEP and folder is not None and not c.execute("SELECT 1 FROM folders WHERE id = ?", (folder,)).fetchone():
+            raise ValueError("folder not found")
+        chosen = set(page_ids)
+        moving = [pid for pid in order if pid in chosen]  # document order
+        positions = [order.index(pid) for pid in moving]
+        new = create_doc((name or "").strip()[:120] or f"{source['name']} ({_page_label(positions)})")
+        _renumber(c, new["id"], moving)
+        _renumber(c, source_id, [pid for pid in order if pid not in chosen])
+        c.execute("UPDATE documents SET folder_id = ? WHERE id = ?",
+                  (source["folder_id"] if folder is KEEP else folder, new["id"]))
+        c.execute("INSERT INTO document_tags (doc_id, tag_id) SELECT ?, tag_id FROM document_tags WHERE doc_id = ?",
+                  (new["id"], source_id))
+        _mark_draft(c, source_id, new["id"])
+    return load_doc(new["id"]), positions
+
+
+def return_pages(from_id: str, page_ids: list[str], to_id: str, positions: list[int]) -> dict[str, Any]:
+    """Undo of move_pages: put the pages back into `to_id` at their old positions. The document they came
+    from is deleted when nothing is left in it."""
+    if len(positions) != len(page_ids):
+        raise ValueError("positions must match the pages")
+    with db.transaction() as c:
+        held_pages = load_doc(from_id)["pages"]
+        held = {p["id"] for p in held_pages}
+        for pid in page_ids:
+            if pid not in held:
+                raise KeyError(pid)
+        target = [p["id"] for p in load_doc(to_id)["pages"]]
+        for pos, pid in sorted(zip(positions, page_ids)):
+            target.insert(min(max(pos, 0), len(target)), pid)
+        _renumber(c, to_id, target)
+        rest = [p["id"] for p in held_pages if p["id"] not in set(page_ids)]
+        _renumber(c, from_id, rest)
+        if rest:
+            _mark_draft(c, from_id)
+        else:
+            c.execute("DELETE FROM documents WHERE id = ?", (from_id,))
+        _mark_draft(c, to_id)
+    collect_garbage()
+    return load_doc(to_id)
+
+
 def find_page(doc: dict[str, Any], page_id: str) -> dict[str, Any]:
     for page in doc["pages"]:
         if page["id"] == page_id:

@@ -11,6 +11,7 @@ from app.ocr.registry import get_ocr
 @pytest.fixture(autouse=True)
 def restore_settings(monkeypatch):
     before = dict(settings._overrides)
+    settings._overrides = {}  # not the languages saved on this machine
     monkeypatch.setattr(settings, "update", lambda patch: settings._overrides.update(patch))
     yield
     settings._overrides = before

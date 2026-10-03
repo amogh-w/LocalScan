@@ -69,6 +69,17 @@ class ApplySort(BaseModel):
     groups: list[SortGroup] = Field(min_length=1, max_length=sort.MAX_PAGES)
 
 
+class MovePages(BaseModel):
+    page_ids: list[str] = Field(min_length=1, max_length=500)
+    folder_id: str | None = None  # send it (even null = unfiled) to choose the folder; omit it to keep this document's
+
+
+class ReturnPages(BaseModel):
+    page_ids: list[str] = Field(min_length=1, max_length=500)
+    from_doc_id: str
+    positions: list[int]
+
+
 class RemovePages(BaseModel):
     page_ids: list[str] = Field(min_length=1)
 
@@ -258,6 +269,33 @@ def delete_page(doc_id: str, page_id: str):
         _mark_dirty(doc)
     storage.collect_garbage()
     return doc
+
+
+@router.post("/{doc_id}/move-pages")
+def move_pages(doc_id: str, body: MovePages):
+    """Move pages out of this document into a new scan (in the chosen folder, else this document's)."""
+    _editable(_doc(doc_id))
+    folder = body.folder_id if "folder_id" in body.model_fields_set else storage.KEEP
+    try:
+        new, positions = storage.move_pages(doc_id, body.page_ids, folder)
+    except KeyError:
+        raise HTTPException(400, "a page does not belong to this document")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"document": new, "positions": positions, "source": _doc(doc_id)}
+
+
+@router.post("/{doc_id}/return-pages")
+def return_pages(doc_id: str, body: ReturnPages):
+    """Undo move-pages: bring the pages back into this document at their old positions."""
+    _editable(_doc(doc_id))
+    _editable(_doc(body.from_doc_id))
+    try:
+        return storage.return_pages(body.from_doc_id, body.page_ids, doc_id, body.positions)
+    except KeyError:
+        raise HTTPException(400, "a page does not belong to that document")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.post("/{doc_id}/remove-pages")
