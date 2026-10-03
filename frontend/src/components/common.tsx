@@ -1,11 +1,8 @@
+import {
+  CircleAlert, CircleCheck, CircleDashed, Clock, Columns2, ExternalLink, FileText, Languages, LoaderCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { fileUrl, type Doc, type OutputKind } from "../api";
-import { CircleAlert, CircleCheck, CircleDashed, Clock, Download, LoaderCircle } from "lucide-react";
-
-const LABELS: Record<OutputKind, string> = {
-  translated: "English PDF",
-  scan: "German scan",
-  side_by_side: "Side by side",
-};
 
 const STATUS_ICONS = {
   draft: CircleDashed,
@@ -32,17 +29,28 @@ export function StatusBadge({ doc }: { doc: Doc }) {
   );
 }
 
-export function Downloads({ doc, compact = false }: { doc: Doc; compact?: boolean }) {
-  const kinds: OutputKind[] = ["translated", "scan", "side_by_side"];
+/** The three PDFs of a document, in the order shown everywhere. `kind` is the key the backend stores. */
+const PDFS: { kind: OutputKind; short: string; full: string; icon: LucideIcon }[] = [
+  { kind: "scan", short: "Original", full: "Original PDF", icon: FileText },
+  { kind: "translated", short: "Translated", full: "Translated PDF", icon: Languages },
+  { kind: "side_by_side", short: "Side by side", full: "Side by side", icon: Columns2 },
+];
+
+/**
+ * Opens a finished document's PDFs in a new tab (the browser's viewer can save or print them).
+ * "row" is three compact buttons for cards; "stack" is full-width rows for the options panel.
+ */
+export function PdfLinks({ doc, layout = "row" }: { doc: Doc; layout?: "row" | "stack" }) {
   return (
-    <div className={`downloads${compact ? " compact" : ""}`}>
-      {kinds
-        .filter((k) => doc.outputs[k])
-        .map((k) => (
-          <a key={k} className={`btn${k === "translated" && !compact ? " primary" : ""}`} href={fileUrl(doc.id, k)}>
-            <Download /> {LABELS[k]}
-          </a>
-        ))}
+    <div className={`pdf-links ${layout}`}>
+      {PDFS.filter((p) => doc.outputs[p.kind]).map((p) => (
+        <a key={p.kind} className={`pdf-link${p.kind === "translated" ? " main" : ""}`} href={fileUrl(doc.id, p.kind, true)}
+          target="_blank" rel="noopener" title={`${p.full}: opens in a new tab`} aria-label={`${p.full} (opens in a new tab)`}>
+          <p.icon />
+          <span>{layout === "stack" ? p.full : p.short}</span>
+          {layout === "stack" && <ExternalLink className="ext" />}
+        </a>
+      ))}
     </div>
   );
 }

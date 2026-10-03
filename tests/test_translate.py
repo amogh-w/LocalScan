@@ -35,9 +35,14 @@ def test_retries_missing_ids_and_keeps_order(monkeypatch):
     assert calls[0]["format"]["required"] == ["p0b0", "p0b1", "p0b2"]
 
 
-def test_falls_back_to_source_after_repeated_failure(monkeypatch):
+def test_reports_none_after_repeated_failure(monkeypatch):
+    """None (not the source text) tells the caller this block was not translated, so it is not cached."""
+    calls = []
+
     def fake_post(url, json=None, timeout=None):
+        calls.append(json)
         return httpx.Response(200, json={"message": {"content": "{}"}}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    assert OllamaTranslator(model="m").translate_blocks(_blocks("Hallo")) == ["Hallo"]
+    assert OllamaTranslator(model="m").translate_blocks(_blocks("Hallo")) == [None]
+    assert len(calls) == 3  # it tried three times before giving up

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, Camera, ChevronLeft, ChevronRight, Contrast, Crop, ExternalLink, Eye, FileUp, Image,
+  ArrowLeft, ArrowRight, Camera, ChevronLeft, ChevronRight, Contrast, Crop, Eye, FileUp, Image,
   Images, Languages, LayoutGrid, LoaderCircle, Maximize, Palette, RotateCcw, RotateCw, ScanSearch, ScanText,
   SlidersHorizontal, Sparkles, Trash2, type LucideIcon,
 } from "lucide-react";
-import { api, fileUrl, imageUrl, prepareImage, previewUrl, type Doc, type Filter, type Page, type Point } from "../api";
+import { api, imageUrl, prepareImage, previewUrl, type Doc, type Filter, type Page, type Point } from "../api";
 import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
 import NameOptions from "../components/NameOptions";
-import { Downloads, StatusBadge } from "../components/common";
+import Organize from "../components/Organize";
+import { PdfLinks, StatusBadge } from "../components/common";
 
 const FILTERS: { id: Filter; label: string; icon: LucideIcon }[] = [
   { id: "enhanced", label: "Auto", icon: Sparkles },
@@ -271,6 +272,7 @@ export default function DocPage({ id }: { id: string }) {
         {/* Options: color, crop, other actions, then translate/export */}
         <aside className="panel options-panel">
           <NameOptions doc={doc} onChange={setDoc} onError={setError} />
+          <Organize doc={doc} onChange={setDoc} onError={setError} />
           {page && (
             <>
               <section className="opt-group">
@@ -338,12 +340,7 @@ export default function DocPage({ id }: { id: string }) {
               </div>
               {busy && doc.progress && <progress max={Math.max(1, doc.progress.total)} value={doc.progress.done} />}
               {doc.status === "done" ? (
-                <>
-                  <a className="btn primary" href={fileUrl(id, "translated", true)} target="_blank">
-                    <ExternalLink /> Open English PDF
-                  </a>
-                  <Downloads doc={doc} compact />
-                </>
+                <PdfLinks doc={doc} layout="stack" />
               ) : (
                 <button className="btn primary big" disabled={busy} onClick={translate}>
                   {busy ? <LoaderCircle className="spin" /> : <Languages />}

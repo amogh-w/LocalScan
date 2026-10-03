@@ -24,10 +24,30 @@ export interface NameSuggestion {
   subject: string;
 }
 
+export interface Folder {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  position: number;
+  count: number;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string; // a Catppuccin accent name
+  count?: number;
+}
+
+/** Which documents the library shows. */
+export type LibraryView = { kind: "all" } | { kind: "unfiled" } | { kind: "folder"; id: string } | { kind: "tag"; id: string };
+
 export interface Doc {
   id: string;
   name: string;
   name_source?: NameSource;
+  folder_id: string | null;
+  tags: Tag[];
   created: number;
   pages: Page[];
   status: Status;
@@ -76,7 +96,24 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 const d = (id: string) => `/api/docs/${id}`;
 
 export const api = {
-  listDocs: () => req<Doc[]>("GET", "/api/docs"),
+  listDocs: (view: LibraryView = { kind: "all" }) => {
+    const q = view.kind === "folder" ? `?folder=${view.id}` : view.kind === "unfiled" ? "?folder=none"
+      : view.kind === "tag" ? `?tag=${view.id}` : "";
+    return req<Doc[]>("GET", `/api/docs${q}`);
+  },
+  moveDoc: (id: string, folder_id: string | null) => req<Doc>("PATCH", d(id), { folder_id }),
+  setDocTags: (id: string, tags: string[]) => req<Doc>("PATCH", d(id), { tags }),
+  bulk: (ids: string[], action: "move" | "tag" | "untag" | "delete", extra: { folder_id?: string | null; tag_id?: string } = {}) =>
+    req<{ ok: boolean }>("POST", "/api/docs/bulk", { ids, action, ...extra }),
+  listFolders: () => req<Folder[]>("GET", "/api/folders"),
+  createFolder: (name: string, parent_id: string | null = null) => req<Folder>("POST", "/api/folders", { name, parent_id }),
+  renameFolder: (id: string, name: string) => req<Folder>("PATCH", `/api/folders/${id}`, { name }),
+  moveFolder: (id: string, parent_id: string | null) => req<Folder>("PATCH", `/api/folders/${id}`, { parent_id }),
+  deleteFolder: (id: string) => req<{ ok: boolean }>("DELETE", `/api/folders/${id}`),
+  listTags: () => req<{ tags: Tag[]; colors: string[] }>("GET", "/api/tags"),
+  createTag: (name: string, color?: string) => req<Tag>("POST", "/api/tags", { name, color }),
+  updateTag: (id: string, patch: { name?: string; color?: string }) => req<Tag>("PATCH", `/api/tags/${id}`, patch),
+  deleteTag: (id: string) => req<{ ok: boolean }>("DELETE", `/api/tags/${id}`),
   createDoc: (name = "") => req<Doc>("POST", "/api/docs", { name }),
   getDoc: (id: string) => req<Doc>("GET", d(id)),
   renameDoc: (id: string, name: string, name_source: "manual" | "ai" = "manual") =>
@@ -128,4 +165,19 @@ export async function prepareImage(file: File, maxEdge = 3000): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", 0.92),
   );
+}
+
+/** Folders as an indented, depth-first list (for pickers), children sorted after their parent. */
+export function flattenFolders(folders: Folder[]): (Folder & { depth: number })[] {
+  const kids = new Map<string | null, Folder[]>();
+  for (const f of folders) kids.set(f.parent_id, [...(kids.get(f.parent_id) ?? []), f]);
+  const out: (Folder & { depth: number })[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    for (const f of kids.get(parent) ?? []) {
+      out.push({ ...f, depth });
+      walk(f.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  return out;
 }

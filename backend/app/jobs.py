@@ -3,27 +3,31 @@ import hashlib
 import json
 import logging
 import queue
+import tempfile
 import threading
 import traceback
+from pathlib import Path
 
 import numpy as np
 
 from . import storage
+from .db import blobs
 from .config import settings
 from .ocr.blocks import group_blocks
 from .ocr.registry import get_ocr
 from .render.pdf import RenderPage, build_scan_pdf, build_side_by_side_pdf, build_translated_pdf
 from .scan.detect import FULL_IMAGE
-from .scan.io import read_image, write_image
+from .scan.io import encode_jpeg, read_image
 from .scan.warp import process_page
 from .translate.registry import get_translator
 
 log = logging.getLogger(__name__)
 
+# Output kind -> download file name.
 OUTPUTS = {
-    "scan": ("scan.pdf", "{name} (scan).pdf"),
-    "translated": ("translated.pdf", "{name} (English).pdf"),
-    "side_by_side": ("side_by_side.pdf", "{name} (side-by-side).pdf"),
+    "scan": "{name} (original).pdf",
+    "translated": "{name} (translated).pdf",
+    "side_by_side": "{name} (side-by-side).pdf",
 }
 
 _queue: "queue.Queue[str]" = queue.Queue()
@@ -34,7 +38,7 @@ SCAN_VERSION = 2
 
 
 def clean_key(page: dict) -> str:
-    raw = json.dumps([SCAN_VERSION, page["file"], page["corners"], page["rotation"], page["filter"]])
+    raw = json.dumps([SCAN_VERSION, page["original"], page["corners"], page["rotation"], page["filter"]])
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
@@ -65,14 +69,16 @@ class _OcrHolder:
 
 def prepare_page(doc_id: str, page: dict, ocr: _OcrHolder) -> np.ndarray:
     """Dewarp + filter the page and OCR it, reusing cached results. Updates `page` in place."""
-    d = storage.doc_dir(doc_id)
     key = clean_key(page)
-    clean_path = d / "pages" / f"{page['id']}.clean.jpg"
-    if page.get("clean_key") == key and clean_path.exists():
-        img = read_image(clean_path)
-    else:
-        img = process_page(read_image(d / page["file"]), page["corners"], page["rotation"], page["filter"])
-        write_image(clean_path, img)
+    img = None
+    if page.get("clean_key") == key and page.get("clean"):
+        try:
+            img = read_image(blobs.path(page["clean"]))
+        except (KeyError, ValueError):
+            img = None
+    if img is None:
+        img = process_page(read_image(blobs.path(page["original"])), page["corners"], page["rotation"], page["filter"])
+        page["clean"] = blobs.put(encode_jpeg(img, 92), "jpg")
         page["clean_key"] = key
     if page.get("ocr_key") != key:
         page["lines"] = page["pdf_lines"] if _uses_pdf_text(page) else ocr.get().ocr(img)
@@ -80,26 +86,29 @@ def prepare_page(doc_id: str, page: dict, ocr: _OcrHolder) -> np.ndarray:
     return img
 
 
-def document_text(doc_id: str, max_pages: int = 2) -> str:
-    """Reading-order text of the first pages, OCR'ing them if needed (used for AI naming on request)."""
-    doc = storage.load_doc(doc_id)
-    pages = doc["pages"][:max_pages]
+def document_pages_text(doc_id: str) -> list[str]:
+    """Reading-order text of every page, OCR'ing pages that aren't read yet (used for AI naming on request)."""
+    pages = storage.load_doc(doc_id)["pages"]
     ocr = _OcrHolder()
     for page in pages:
         prepare_page(doc_id, page, ocr)
-    with storage.editing(doc_id) as fresh:  # store the OCR so translating later doesn't redo it
-        by_id = {p["id"]: p for p in pages}
-        fresh["pages"] = [by_id.get(p["id"], p) for p in fresh["pages"]]
+    with storage.editing(doc_id) as fresh:  # keep the OCR so translating later doesn't redo it
+        read = {p["id"]: p for p in pages}
+        for p in fresh["pages"]:
+            mine = read.get(p["id"])
+            # Skip pages that were re-cropped or re-filtered while we were reading them.
+            if mine and clean_key(p) == mine["clean_key"]:
+                p.update(clean=mine["clean"], clean_key=mine["clean_key"], ocr_key=mine["ocr_key"], lines=mine["lines"])
     return page_texts(pages)
 
 
-def page_texts(pages: list[dict]) -> str:
-    return "\n\n".join(b["text"] for i, p in enumerate(pages) for b in group_blocks(p.get("lines") or [], i))
+def page_texts(pages: list[dict]) -> list[str]:
+    """Reading-order text of each page ("" for pages without OCR text yet)."""
+    return ["\n\n".join(b["text"] for b in group_blocks(p.get("lines") or [], i)) for i, p in enumerate(pages)]
 
 
 def process(doc_id: str) -> None:
     doc = storage.load_doc(doc_id)
-    d = storage.doc_dir(doc_id)
     pages = doc["pages"]
     if not pages:
         raise RuntimeError("Document has no pages")
@@ -120,36 +129,43 @@ def process(doc_id: str) -> None:
     tcfg = settings.section("translator")
     src, tgt = tcfg.get("source_lang", "German"), tcfg.get("target_lang", "English")
     tkey = translator.cache_key()
-    cache = doc.setdefault("tcache", {})
 
     def ck(text: str) -> str:
         return hashlib.sha1(f"{tkey}|{src}|{tgt}|{text}".encode()).hexdigest()[:20]
 
     all_blocks = [b for bl in blocks_per_page for b in bl]
+    cache = storage.cached_translations(ck(b["text"]) for b in all_blocks)  # shared by all documents
     todo = [b for b in all_blocks if ck(b["text"]) not in cache]
     if todo:
         _progress(doc_id, "Translating", 0, 1)
+
         def on_progress(done: int, total: int) -> None:
             _progress(doc_id, "Translating", done, total)
 
-        for b, t in zip(todo, translator.translate_blocks(todo, src, tgt, on_progress)):
-            cache[ck(b["text"])] = t
-        _save(doc_id, tcache=cache)
+        results = translator.translate_blocks(todo, src, tgt, on_progress)
+        # Cache only real translations. A failed block (None) is shown untranslated this time and retried
+        # on the next run, instead of pinning its source text in the cache for good.
+        new = {ck(b["text"]): t for b, t in zip(todo, results) if t is not None}
+        storage.cache_translations(new)
+        cache.update(new)
 
     # 3. Render the three PDFs.
     _progress(doc_id, "Building PDFs", 0, 3)
     render_pages = [
-        RenderPage(img, bl, [cache[ck(b["text"])] for b in bl])
+        RenderPage(img, bl, [cache.get(ck(b["text"]), b["text"]) for b in bl])  # untranslated: show the source
         for img, bl in zip(images, blocks_per_page)
     ]
-    build_scan_pdf(render_pages, d / OUTPUTS["scan"][0])
-    _progress(doc_id, "Building PDFs", 1, 3)
-    build_translated_pdf(render_pages, d / OUTPUTS["translated"][0])
-    _progress(doc_id, "Building PDFs", 2, 3)
-    build_side_by_side_pdf(d / OUTPUTS["scan"][0], d / OUTPUTS["translated"][0], d / OUTPUTS["side_by_side"][0])
+    with tempfile.TemporaryDirectory(prefix="localscan-") as tmp:
+        out = {k: Path(tmp) / f"{k}.pdf" for k in OUTPUTS}
+        build_scan_pdf(render_pages, out["scan"])
+        _progress(doc_id, "Building PDFs", 1, 3)
+        build_translated_pdf(render_pages, out["translated"])
+        _progress(doc_id, "Building PDFs", 2, 3)
+        build_side_by_side_pdf(out["scan"], out["translated"], out["side_by_side"])
+        outputs = {k: blobs.put_file(f) for k, f in out.items()}
 
-    _save(doc_id, pages=pages, tcache=cache, status="done", progress=None, error=None,
-          outputs={k: v[0] for k, v in OUTPUTS.items()})
+    _save(doc_id, pages=pages, status="done", progress=None, error=None, outputs=outputs)
+    storage.collect_garbage()  # previous PDFs and replaced cleaned pages
 
 
 def _worker() -> None:

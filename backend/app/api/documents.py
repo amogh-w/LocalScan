@@ -1,5 +1,6 @@
+import hashlib
+import json
 import re
-import shutil
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -13,11 +14,12 @@ from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from .. import jobs, storage
+from .. import jobs, library, storage
 from ..ai import naming
+from ..db import blobs
 from ..ocr.pdf_text import page_lines
 from ..scan.detect import FULL_IMAGE, detect_corners
-from ..scan.io import decode_upload, encode_jpeg, read_image, write_image
+from ..scan.io import decode_upload, encode_jpeg, read_image
 from ..scan.warp import FILTERS, process_page
 
 router = APIRouter(prefix="/api/docs", tags=["documents"])
@@ -66,6 +68,15 @@ class DocPatch(BaseModel):
     # Who chose the name: "manual" (typed) by default, "ai" when accepting a suggestion.
     name_source: Literal["manual", "ai"] = "manual"
     page_order: list[str] | None = None
+    folder_id: str | None = None   # send it (even null = unfiled) to move the document
+    tags: list[str] | None = None  # full list of tag ids
+
+
+class BulkAction(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+    action: Literal["move", "tag", "untag", "delete"]
+    folder_id: str | None = None
+    tag_id: str | None = None
 
 
 class PagePatch(BaseModel):
@@ -75,17 +86,35 @@ class PagePatch(BaseModel):
 
 
 @router.get("")
-def list_docs():
-    return storage.list_docs()
+def list_docs(folder: str | None = None, tag: str | None = None):
+    """folder: a folder id or "none" (unfiled); tag: a tag id."""
+    return storage.list_docs(folder=folder, tag=tag)
+
+
+@router.post("/bulk")
+def bulk(body: BulkAction):
+    try:
+        if body.action == "move":
+            library.set_folder(body.ids, body.folder_id)
+        elif body.action in ("tag", "untag"):
+            if not body.tag_id:
+                raise HTTPException(400, "tag_id is required")
+            (library.add_tag if body.action == "tag" else library.remove_tag)(body.ids, body.tag_id)
+        else:
+            for doc_id in body.ids:
+                doc = _doc(doc_id)
+                _editable(doc)
+            for doc_id in body.ids:
+                storage.delete_doc(doc_id)
+    except library.LibraryError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
 
 
 @router.post("")
 def create_doc(body: NewDoc):
     name = body.name.strip()
-    doc = storage.create_doc(name or time.strftime("Scan %Y-%m-%d %H-%M"))
-    with _edit(doc["id"]) as doc:
-        doc["name_source"] = "manual" if name else "default"
-    return doc
+    return storage.create_doc(name or time.strftime("Scan %Y-%m-%d %H-%M"), "manual" if name else "default")
 
 
 @router.get("/{doc_id}")
@@ -106,24 +135,29 @@ def patch_doc(doc_id: str, body: DocPatch):
                 raise HTTPException(400, "page_order must list every page once")
             doc["pages"] = [by_id[i] for i in body.page_order]
             _mark_dirty(doc)
-    return doc
+    try:
+        if "folder_id" in body.model_fields_set:
+            library.set_folder([doc_id], body.folder_id)
+        if body.tags is not None:
+            library.set_tags(doc_id, body.tags)
+    except library.LibraryError as e:
+        raise HTTPException(400, str(e))
+    return _doc(doc_id)
 
 
 @router.delete("/{doc_id}")
 def delete_doc(doc_id: str):
     doc = _doc(doc_id)
     _editable(doc)
-    shutil.rmtree(storage.doc_dir(doc_id), ignore_errors=True)
+    storage.delete_doc(doc_id)
     return {"ok": True}
 
 
 def _new_page(doc_id: str, img, source: str = "photo") -> dict:
-    page_id = storage.new_id()
-    rel = f"pages/{page_id}.jpg"
-    write_image(storage.doc_dir(doc_id) / rel, img, 94)
+    original = blobs.put(encode_jpeg(img, 94), "jpg")
     h, w = img.shape[:2]
     corners = detect_corners(img) if source == "photo" else [p[:] for p in FULL_IMAGE]
-    return {"id": page_id, "file": rel, "width": w, "height": h, "source": source,
+    return {"id": storage.new_id(), "original": original, "width": w, "height": h, "source": source,
             "corners": corners, "detected": corners, "rotation": 0,
             "filter": "enhanced" if source == "photo" else "original"}
 
@@ -192,36 +226,54 @@ def delete_page(doc_id: str, page_id: str):
         _editable(doc)
         doc["pages"].remove(_page(doc, page_id))
         _mark_dirty(doc)
-    for p in storage.doc_dir(doc_id).joinpath("pages").glob(f"{page_id}.*"):
-        p.unlink(missing_ok=True)
+    storage.collect_garbage()
     return doc
+
+
+def _cached_jpeg(key: str, page_id: str, render, headers: dict | None = None) -> Response:
+    """Serve a rendered JPEG from the preview cache, rendering and storing it on the first request."""
+    key = hashlib.sha1(key.encode()).hexdigest()
+    cached = storage.cached_preview(key)
+    if cached is not None:
+        return FileResponse(cached, media_type="image/jpeg", headers=headers)
+    data = render()
+    storage.cache_preview(key, page_id, data)
+    return Response(data, media_type="image/jpeg", headers=headers)
 
 
 @router.get("/{doc_id}/pages/{page_id}/image")
 def page_image(doc_id: str, page_id: str, size: int = Query(1600, ge=100, le=4000, alias="max")):
     """The original photo, downscaled for the corner editor."""
     page = _page(_doc(doc_id), page_id)
-    img = read_image(storage.doc_dir(doc_id) / page["file"])
-    h, w = img.shape[:2]
-    s = min(1.0, size / max(h, w))
-    if s < 1:
-        img = cv2.resize(img, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA)
-    return Response(encode_jpeg(img, 85), media_type="image/jpeg", headers={"Cache-Control": "max-age=86400"})
+
+    def render() -> bytes:
+        img = read_image(blobs.path(page["original"]))
+        h, w = img.shape[:2]
+        s = min(1.0, size / max(h, w))
+        if s < 1:
+            img = cv2.resize(img, (round(w * s), round(h * s)), interpolation=cv2.INTER_AREA)
+        return encode_jpeg(img, 85)
+
+    return _cached_jpeg(f"img|{page['original']}|{size}", page_id, render, {"Cache-Control": "max-age=86400"})
 
 
 @router.get("/{doc_id}/pages/{page_id}/preview")
 def page_preview(doc_id: str, page_id: str, size: int = Query(1200, ge=100, le=3000, alias="max")):
     """The page as it will appear in the PDF (dewarped, rotated, filtered)."""
     page = _page(_doc(doc_id), page_id)
-    img = read_image(storage.doc_dir(doc_id) / page["file"])
-    out = process_page(img, page["corners"], page["rotation"], page["filter"], max_long_edge=size)
-    return Response(encode_jpeg(out, 82), media_type="image/jpeg")
+
+    def render() -> bytes:
+        img = read_image(blobs.path(page["original"]))
+        return encode_jpeg(process_page(img, page["corners"], page["rotation"], page["filter"], max_long_edge=size), 82)
+
+    key = json.dumps(["pv", jobs.SCAN_VERSION, page["original"], page["corners"], page["rotation"], page["filter"], size])
+    return _cached_jpeg(key, page_id, render)
 
 
 @router.post("/{doc_id}/pages/{page_id}/autodetect")
 def autodetect(doc_id: str, page_id: str):
     page = _page(_doc(doc_id), page_id)
-    corners = detect_corners(read_image(storage.doc_dir(doc_id) / page["file"]))
+    corners = detect_corners(read_image(blobs.path(page["original"])))
     with _edit(doc_id) as doc:
         _editable(doc)
         page = _page(doc, page_id)
@@ -232,15 +284,15 @@ def autodetect(doc_id: str, page_id: str):
 
 @router.post("/{doc_id}/suggest-name")
 def suggest_name(doc_id: str):
-    """AI name from the document's text: {name, date, sender, subject}. Reads the pages first if needed."""
+    """AI name from the text of all pages: {name, date, sender, subject}. Reads pages not yet read first."""
     doc = _doc(doc_id)
     if not doc["pages"]:
         raise HTTPException(400, "add pages first")
     try:
         # While processing, use the text read so far instead of competing with the worker.
         busy = doc["status"] in ("queued", "processing")
-        text = jobs.page_texts(doc["pages"][:2]) if busy else jobs.document_text(doc_id)
-        return naming.suggest_name(text)
+        texts = jobs.page_texts(doc["pages"]) if busy else jobs.document_pages_text(doc_id)
+        return naming.suggest_name(texts)
     except ValueError as e:
         raise HTTPException(409, str(e))
     except httpx.HTTPError as e:
@@ -263,7 +315,6 @@ def download(doc_id: str, kind: str, inline: bool = False):
     doc = _doc(doc_id)
     if kind not in jobs.OUTPUTS or kind not in doc.get("outputs", {}):
         raise HTTPException(404, "not generated yet")
-    fname, pretty = jobs.OUTPUTS[kind]
-    pretty = re.sub(r'[\\/:*?"<>|]', "_", pretty.format(name=doc["name"]))
-    return FileResponse(storage.doc_dir(doc_id) / fname, media_type="application/pdf", filename=pretty,
+    pretty = re.sub(r'[\\/:*?"<>|]', "_", jobs.OUTPUTS[kind].format(name=doc["name"]))
+    return FileResponse(blobs.path(doc["outputs"][kind]), media_type="application/pdf", filename=pretty,
                         content_disposition_type="inline" if inline else "attachment")

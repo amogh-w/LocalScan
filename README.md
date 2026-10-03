@@ -4,9 +4,11 @@ Local Scan is a local replacement for "Adobe Scan, then Google Translate". Photo
 your phone, fix the crop by dragging the four corners, and get three PDFs back, all without anything
 leaving your PC:
 
-- **English PDF**: same layout, logos, stamps and signatures as the original, with the German text replaced by English
-- **German scan**: the cleaned original with a searchable text layer
+- **Original PDF**: the cleaned scan, with a searchable text layer
+- **Translated PDF**: same layout, logos, stamps and signatures, with the text replaced by its translation
 - **Side by side**: original and translation next to each other
+
+Each opens in a new browser tab.
 
 OCR runs on the GPU with PaddleOCR (in-process by default) and translation on your local Ollama.
 

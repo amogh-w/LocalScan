@@ -113,9 +113,9 @@ class OllamaTranslator:
         r.raise_for_status()
         return _parse_json(r.json()["message"]["content"])
 
-    def _translate_chunk(self, chunk: list[Block], context: str, src: str, tgt: str) -> dict[str, str]:
+    def _translate_chunk(self, chunk: list[Block], context: str, src: str, tgt: str) -> dict[str, str | None]:
         system = SYSTEM_PROMPT.format(src=src, tgt=tgt)
-        result: dict[str, str] = {}
+        result: dict[str, str | None] = {}
         todo = chunk
         for _attempt in range(3):
             segments = {b["id"]: b["text"] for b in todo}
@@ -135,14 +135,14 @@ class OllamaTranslator:
             todo = [b for b in todo if b["id"] not in result]
             if not todo:
                 break
-        for b in todo:  # give up: keep the source text rather than leave a hole
-            log.warning("no translation for %s, keeping source", b["id"])
-            result[b["id"]] = b["text"]
+        for b in todo:  # give up on these: None tells the caller to show the source text but not to cache it
+            log.warning("no translation for %s, will retry on the next run", b["id"])
+            result[b["id"]] = None
         return result
 
     def translate_blocks(self, blocks: list[Block], src: str = "German", tgt: str = "English",
-                         on_progress: Callable[[int, int], None] | None = None) -> list[str]:
-        out: dict[str, str] = {}
+                         on_progress: Callable[[int, int], None] | None = None) -> list[str | None]:
+        out: dict[str, str | None] = {}
         context = ""
         chunks = _chunks(blocks)
         for i, chunk in enumerate(chunks):

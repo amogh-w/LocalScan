@@ -23,7 +23,10 @@ function App() {
   const [view, id] = useHashRoute();
   if (view === "doc" && id) return <DocPage key={id} id={id} />;
   if (view === "settings") return <SettingsPage />;
-  return <Library />;
+  if (view === "folder" && id) return <Library view={{ kind: "folder", id }} />;
+  if (view === "tag" && id) return <Library view={{ kind: "tag", id }} />;
+  if (view === "unfiled") return <Library view={{ kind: "unfiled" }} />;
+  return <Library view={{ kind: "all" }} />;
 }
 
 createRoot(document.getElementById("root")!).render(
