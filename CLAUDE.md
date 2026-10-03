@@ -23,8 +23,8 @@ Prose, comments and commit messages use the plain hyphen. Never write em or en d
 ## Commands
 
 ```powershell
-.\run.ps1                         # build frontend if stale, serve everything on :8010 (prints LAN URL + QR)
-.\run.ps1 -Dev                    # backend --reload on :8010 + Vite HMR on :5173 (phone: http://<lan-ip>:5173)
+.\run.bat                         # (double-clickable) build frontend if stale, serve everything on :8010 (prints LAN URL + QR)
+.\run.bat -Dev                    # backend --reload on :8010 + Vite HMR on :5173 (phone: http://<lan-ip>:5173)
 uv sync --extra paddle            # install deps incl. in-process PaddleOCR GPU
 uv run pytest                     # backend tests
 uv run pytest tests/test_ocr.py::test_paragraphs_lists_and_addresses   # single test

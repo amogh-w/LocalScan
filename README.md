@@ -14,8 +14,8 @@ OCR runs on the GPU with PaddleOCR (in-process by default) and translation on yo
 
 ## Run
 
-```powershell
-.\run.ps1
+```bat
+run.bat
 ```
 
 Open `http://localhost:8010` on the PC, or scan the QR code it prints with your phone (same Wi-Fi).
@@ -71,7 +71,7 @@ Adding another OCR or translation engine means one class implementing the protoc
 
 ## Develop
 
-```powershell
+```bat
 uv run pytest               # backend tests
-.\run.ps1 -Dev              # backend reload + Vite on :5173
+run.bat -Dev                # backend reload + Vite on :5173
 ```
