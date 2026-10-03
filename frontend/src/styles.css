@@ -604,3 +604,25 @@ a.side-item:hover, .side-item:hover { background: var(--raised); }
 .panel-head { min-height: 2.25rem; align-items: center; }
 .options-panel-grid > .opt-group.export { margin-top: 0; }
 .page-grid { user-select: none; }
+
+/* Settings > Photos & PDFs */
+.image-settings h3 { font-size: 0.8125rem; font-weight: 600; color: var(--label); margin: 8px 0 2px; }
+.image-settings h3.with-icon svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--accent); }
+.seg.wide { align-self: stretch; }
+.seg.wide button { flex: 1; padding: 0 var(--ctl-px-sm); }
+.form .range-row { display: grid; grid-template-columns: 7rem 1fr 5.5rem; align-items: center; gap: 10px; }
+.form .range-row input[type="range"] { width: 100%; accent-color: var(--accent); }
+.form .range-row b { text-align: right; color: var(--text); font-weight: 600; }
+.preset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 8px; }
+.preset {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; text-align: left;
+  border: 1px solid var(--line); border-radius: var(--ctl-radius); background: var(--bg); color: var(--label);
+  font: inherit; font-size: 0.875rem; cursor: pointer;
+}
+.preset:hover { background: var(--raised); }
+.preset b { color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.preset.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.preset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.badge-default { font-size: 0.6875rem; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--raised); color: var(--label); }
+.reset-btn { align-self: flex-start; margin-top: 4px; }
+@media (max-width: 480px) { .range-row { grid-template-columns: 1fr; gap: 4px; } .range-row b { text-align: left; } }

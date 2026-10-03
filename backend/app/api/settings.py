@@ -3,6 +3,7 @@ import socket
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from .. import imaging
 from ..config import settings
 from ..languages import LANGUAGES, scan_languages, target_language
 from ..ocr.registry import ENGINES as OCR_ENGINES, get_ocr
@@ -30,6 +31,12 @@ def health():
     return {"ocr": {"ok": ocr_ok, "detail": ocr_msg}, "translator": {"ok": tr_ok, "detail": tr_msg}}
 
 
+@router.get("/upload-config")
+def upload_config():
+    """What the phone needs before it uploads a photo (small, so the document screen can fetch it often)."""
+    return {"max_edge": imaging.max_edge(), "resize_quality": imaging.resize_quality()}
+
+
 @router.get("/server-info")
 def server_info():
     port = settings.section("server").get("port", 8000)
@@ -43,6 +50,8 @@ class SettingsPatch(BaseModel):
     paddle_url: str | None = None
     scan_languages: list[str] | None = None
     translate_to: str | None = None
+    images: dict[str, int] | None = None
+    export: dict[str, int | str] | None = None
 
 
 @router.get("/settings")
@@ -67,6 +76,11 @@ def get_settings():
         "languages": [{"code": l.code, "name": l.name, "native": l.native} for l in LANGUAGES.values()],
         "scan_languages": [l.code for l in scan_languages()],
         "translate_to": target_language().code,
+        "images": {k: getattr(imaging, k)() for k in ("max_edge", "resize_quality", "page_dpi", "page_quality")},
+        "export": {**imaging._section("export"), "effective": list(imaging.pdf_params())},
+        "defaults": imaging.DEFAULTS,
+        "presets": {k: {"dpi": v[0], "quality": v[1]} for k, v in imaging.PRESETS.items()},
+        "page_dpis": list(imaging.PAGE_DPIS),
     }
 
 
@@ -101,5 +115,12 @@ def put_settings(body: SettingsPatch):
         if scan == [target]:
             raise HTTPException(400, "There is nothing to translate when the only scan language is the translation language")
         patch["languages"] = {"scan": list(dict.fromkeys(scan)), "translate_to": target}
+    if body.images is not None or body.export is not None:
+        try:
+            checked = imaging.validate({k: v for k, v in (("images", body.images), ("export", body.export)) if v is not None})
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        for section, values in checked.items():
+            patch.setdefault(section, {}).update(values)
     settings.update(patch)
     return get_settings()

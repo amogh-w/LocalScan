@@ -107,6 +107,18 @@ existing `page_order` PATCH. Limit: `MAX_PAGES` = 40, text only.
 - `scripts/sort_benchmark.py` runs synthetic documents (never real letters) through the real model. It is
   slow, so do not run it in loops; unit tests use a fake model (`tests/test_sort.py`).
 
+### Photo and PDF quality (`imaging.py`)
+
+Settings > Photos & PDFs (`[images]` and `[export]` in `config.toml`, saved to `data/settings.json`; UI in
+`components/ImageSettings.tsx`). Uploads have **no pixel limit by default**: a JPEG that needs no change
+(upright, not resized, plain colour) is stored byte for byte (`documents._original_bytes`), and the phone
+sends the file untouched (`prepareImage`); only a limit, an EXIF rotation or a non-JPEG forces a re-encode at
+`resize_quality`. The cleaned page is `page_dpi` (300 = 3508 px) at `page_quality` 92; PDFs use a preset
+(archive 300/92, standard 300/88, small 200/75) or custom values and never exceed the page resolution.
+`jobs.clean_key` only includes the dpi/quality when they differ from the defaults, so default caches stay.
+The Translated PDF subsets its fonts (`doc.subset_fonts()`): each `insert_htmlbox` embeds a whole font, which
+made one real 3-page letter 5.4 MB (145 fonts) instead of 0.4 MB.
+
 ### Languages (`languages.py`)
 
 Settings > Languages picks the scan language and the translation language (`[languages]` in `config.toml`; scan is a list, translate_to a single code,

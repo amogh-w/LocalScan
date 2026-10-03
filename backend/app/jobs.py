@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import storage
+from . import imaging, storage
 from .db import blobs
 from .config import settings
 from .ocr.blocks import group_blocks
@@ -43,6 +43,8 @@ def clean_key(page: dict) -> str:
     key = [SCAN_VERSION, page["original"], page["corners"], page["rotation"], page["filter"]]
     if ocr_code():  # only a language with its own OCR model changes what is read
         key.append(ocr_code())
+    if not imaging.uses_default_pages():  # the defaults keep the keys (and so the caches) of before
+        key.append([imaging.page_dpi(), imaging.page_quality()])
     raw = json.dumps(key)
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
@@ -94,8 +96,9 @@ def prepare_page(doc_id: str, page: dict, ocr: _OcrHolder) -> np.ndarray:
         except (KeyError, ValueError):
             img = None
     if img is None:
-        img = process_page(read_image(blobs.path(page["original"])), page["corners"], page["rotation"], page["filter"])
-        page["clean"] = blobs.put(encode_jpeg(img, 92), "jpg")
+        img = process_page(read_image(blobs.path(page["original"])), page["corners"], page["rotation"], page["filter"],
+                           max_long_edge=imaging.page_max_long_edge())
+        page["clean"] = blobs.put(encode_jpeg(img, imaging.page_quality()), "jpg")
         page["clean_key"] = key
     if page.get("ocr_key") != key:
         page["lines"] = page["pdf_lines"] if _uses_pdf_text(page) else ocr.get().ocr(img)
@@ -187,9 +190,10 @@ def process(doc_id: str) -> None:
     ]
     with tempfile.TemporaryDirectory(prefix="localscan-") as tmp:
         out = {k: Path(tmp) / f"{k}.pdf" for k in OUTPUTS}
-        build_scan_pdf(render_pages, out["scan"])
+        dpi, quality = imaging.pdf_params()
+        build_scan_pdf(render_pages, out["scan"], dpi, quality, title=doc["name"])
         _progress(doc_id, "Building PDFs", 1, 3, "Building the translated PDF")
-        build_translated_pdf(render_pages, out["translated"])
+        build_translated_pdf(render_pages, out["translated"], dpi, quality, title=doc["name"])
         _progress(doc_id, "Building PDFs", 2, 3, "Building the side-by-side PDF")
         build_side_by_side_pdf(out["scan"], out["translated"], out["side_by_side"])
         outputs = {k: blobs.put_file(f) for k, f in out.items()}

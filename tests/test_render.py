@@ -43,3 +43,4 @@ def test_grow_boxes_respects_neighbours():
     assert a[2] < 300 and a[3] <= 115  # stops before the box to its right and the box below
     assert b[2] > 450                   # free to grow to the margin
     assert c[2] > 400 and c[3] > 127
+

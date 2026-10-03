@@ -6,9 +6,10 @@ import numpy as np
 from PIL import Image, ImageOps
 
 
-def decode_upload(data: bytes, max_long_edge: int = 4000) -> np.ndarray:
+def decode_upload(data: bytes, max_long_edge: int = 0) -> np.ndarray:
+    """Decode an uploaded photo upright. max_long_edge limits its longest side; 0 keeps every pixel."""
     pil = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
-    if max(pil.size) > max_long_edge:
+    if max_long_edge and max(pil.size) > max_long_edge:
         pil.thumbnail((max_long_edge, max_long_edge), Image.LANCZOS)
     return cv2.cvtColor(np.asarray(pil), cv2.COLOR_RGB2BGR)
 

@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import re
 import time
@@ -10,11 +11,12 @@ import cv2
 import httpx
 import pymupdf as fitz
 import numpy as np
+from PIL import Image
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from .. import jobs, library, storage
+from .. import imaging, jobs, library, storage
 from ..ai import naming, sort
 from ..db import blobs
 from ..ocr.pdf_text import page_lines
@@ -192,8 +194,20 @@ def empty_trash():
     return {"deleted": storage.purge_trash()}
 
 
-def _new_page(doc_id: str, img, source: str = "photo") -> dict:
-    original = blobs.put(encode_jpeg(img, 94), "jpg")
+def _original_bytes(data: bytes, img) -> bytes:
+    """The uploaded JPEG exactly as received when nothing about it has to change (upright, not resized, plain
+    colour); otherwise the decoded pixels, encoded at the re-encode quality."""
+    try:
+        with Image.open(io.BytesIO(data)) as pil:
+            untouched = (pil.format == "JPEG" and pil.mode in ("RGB", "L") and pil.getexif().get(0x0112, 1) == 1
+                         and pil.size == (img.shape[1], img.shape[0]))
+    except Exception:  # noqa: BLE001 - anything odd is simply re-encoded
+        untouched = False
+    return data if untouched else encode_jpeg(img, imaging.resize_quality())
+
+
+def _new_page(doc_id: str, img, source: str = "photo", original_bytes: bytes | None = None) -> dict:
+    original = blobs.put(original_bytes or encode_jpeg(img, 94), "jpg")
     h, w = img.shape[:2]
     corners = detect_corners(img) if source == "photo" else [p[:] for p in FULL_IMAGE]
     return {"id": storage.new_id(), "original": original, "width": w, "height": h, "source": source,
@@ -208,10 +222,11 @@ async def upload_pages(doc_id: str, files: Annotated[list[UploadFile], File()]):
     added = []
     for f in files:
         try:
-            img = decode_upload(await f.read())
+            data = await f.read()
+            img = decode_upload(data, imaging.max_edge())
         except Exception:
             raise HTTPException(400, f"{f.filename}: not an image")
-        added.append(_new_page(doc_id, img))
+        added.append(_new_page(doc_id, img, original_bytes=_original_bytes(data, img)))
     with _edit(doc_id) as doc:  # concurrent uploads from the phone
         doc["pages"].extend(added)
         _mark_dirty(doc)

@@ -147,9 +147,10 @@ export default function DocPage({ id }: { id: string }) {
     const list = Array.from(files);
     setUploading({ done: 0, total: list.length });
     await run(async () => {
+      const cfg = await api.uploadConfig().catch(() => undefined); // the size limit chosen in Settings
       let last: Doc | null = null;
       for (let i = 0; i < list.length; i++) {
-        last = await api.uploadPages(id, [await prepareImage(list[i])]);
+        last = await api.uploadPages(id, [await prepareImage(list[i], cfg)]);
         setDoc(last);
         setUploading({ done: i + 1, total: list.length });
       }

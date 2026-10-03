@@ -31,11 +31,33 @@ def page_size(img: np.ndarray) -> tuple[float, float]:
     return width, width * h / w
 
 
-def _add_image_page(doc: fitz.Document, img: np.ndarray) -> tuple[fitz.Page, float]:
+DEFAULT_DPI, DEFAULT_QUALITY = 300, 88
+
+
+def pdf_image(img: np.ndarray, pw: float, dpi: int, quality: int) -> tuple[bytes, np.ndarray]:
+    """The page image as it goes into the PDF, encoded once: resampled down to `dpi` for a page `pw` points wide
+    (never up), then a 1-channel JPEG when the page is grey, or a PNG when it is pure black and white.
+    Returns (bytes, the resampled image)."""
+    sample = img[::7, ::7]  # what kind of page is it? decided before resampling blurs the levels
+    grey = np.array_equal(sample[..., 0], sample[..., 1]) and np.array_equal(sample[..., 1], sample[..., 2])
+    black_white = grey and len(np.unique(sample[..., 0])) <= 2
+    target = round(pw / 72 * dpi)
+    if img.shape[1] > target:
+        img = cv2.resize(img, (target, round(img.shape[0] * target / img.shape[1])), interpolation=cv2.INTER_AREA)
+    if black_white:
+        return cv2.imencode(".png", img[..., 0])[1].tobytes(), img
+    if grey:
+        return cv2.imencode(".jpg", img[..., 0], [cv2.IMWRITE_JPEG_QUALITY, quality])[1].tobytes(), img
+    return encode_jpeg(img, quality), img
+
+
+def _add_image_page(doc: fitz.Document, img: np.ndarray, dpi: int = DEFAULT_DPI,
+                    quality: int = DEFAULT_QUALITY) -> tuple[fitz.Page, float]:
     pw, ph = page_size(img)
     page = doc.new_page(width=pw, height=ph)
-    page.insert_image(page.rect, stream=encode_jpeg(img, 88))
-    return page, pw / img.shape[1]
+    data, _ = pdf_image(img, pw, dpi, quality)
+    page.insert_image(page.rect, stream=data)
+    return page, pw / img.shape[1]  # zoom is relative to the full image: the text boxes are in its pixels
 
 
 def _rect(bbox: list[float], zoom: float) -> fitz.Rect:
@@ -54,10 +76,13 @@ def _invisible_text(page: fitz.Page, text: str, rect: fitz.Rect) -> None:
                      morph=(origin, fitz.Matrix(sx, 1)))
 
 
-def build_scan_pdf(pages: list[RenderPage], out: Path) -> None:
+def build_scan_pdf(pages: list[RenderPage], out: Path, dpi: int = DEFAULT_DPI, quality: int = DEFAULT_QUALITY,
+                   title: str = "") -> None:
     doc = fitz.open()
+    if title:
+        doc.set_metadata({"title": title})
     for p in pages:
-        page, zoom = _add_image_page(doc, p.image)
+        page, zoom = _add_image_page(doc, p.image, dpi, quality)
         for block in p.blocks:
             for line in block["lines"]:
                 _invisible_text(page, line["text"], _rect(line["bbox"], zoom))
@@ -170,11 +195,14 @@ def grow_boxes(boxes: list[list[float]], page_w: float, page_h: float,
     return grown
 
 
-def build_translated_pdf(pages: list[RenderPage], out: Path) -> None:
+def build_translated_pdf(pages: list[RenderPage], out: Path, dpi: int = DEFAULT_DPI, quality: int = DEFAULT_QUALITY,
+                         title: str = "") -> None:
     doc = fitz.open()
+    if title:
+        doc.set_metadata({"title": title})
     for p in pages:
         lines = [line for block in p.blocks for line in block["lines"]]
-        page, zoom = _add_image_page(doc, erase_lines(p.image, lines))
+        page, zoom = _add_image_page(doc, erase_lines(p.image, lines), dpi, quality)
         boxes = grow_boxes([[v * zoom for v in b["bbox"]] for b in p.blocks], page.rect.width, page.rect.height,
                            obstacle_mask(p.image, p.blocks, zoom))
         sizes = snap_sizes([block_font_size(b, zoom) for b in p.blocks])
@@ -204,7 +232,10 @@ def build_translated_pdf(pages: list[RenderPage], out: Path) -> None:
             own = fitz.Rect(own.x0, own.y0, min(own.x1 + own.width * 0.04 + 2, max(own.x1 + 2, box[2])),
                             own.y1 + own.height / n * 0.5)
             _fit(page, own, fitz.Rect(box), body, _css(fs, line_height, color))
-    doc.save(out, garbage=3, deflate=True)
+    # Every insert_htmlbox call embeds its own whole font, about 35 KB per text box (145 fonts, 5 MB for a
+    # 3-page letter). Subsetting merges them into one small font per face (0.4 MB), with identical text.
+    doc.subset_fonts()
+    doc.save(out, garbage=4, deflate=True, deflate_fonts=True)
 
 
 def build_side_by_side_pdf(scan_pdf: Path, translated_pdf: Path, out: Path, gap: float = 18) -> None:
@@ -217,4 +248,4 @@ def build_side_by_side_pdf(scan_pdf: Path, translated_pdf: Path, out: Path, gap:
         page.show_pdf_page(fitz.Rect(lr.width + gap, 0, lr.width + gap + rr.width, rr.height), right, i)
         page.draw_line(fitz.Point(lr.width + gap / 2, 0), fitz.Point(lr.width + gap / 2, page.rect.height),
                        color=(0.8, 0.8, 0.8), width=0.5)
-    doc.save(out, garbage=3, deflate=True)
+    doc.save(out, garbage=4, deflate=True, deflate_fonts=True)

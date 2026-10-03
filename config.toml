@@ -31,3 +31,14 @@ url = "http://localhost:11434"
 model = ""          # empty = first installed model; change it on the Settings page
 temperature = 0.1
 timeout = 600
+
+[images]
+max_edge = 0          # longest side of an uploaded photo in px; 0 = keep every pixel
+resize_quality = 92   # JPEG quality, used only when a photo is resized or converted (PNG, rotated by EXIF...)
+page_dpi = 300        # resolution of the cleaned page: A4 long edge = dpi x 11.69 px
+page_quality = 92     # JPEG quality of the cleaned page that is stored
+
+[export]
+preset = "standard"   # archive | standard | small | custom (custom uses dpi and quality below)
+dpi = 300
+quality = 88

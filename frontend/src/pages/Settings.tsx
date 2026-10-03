@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Activity, ChevronLeft, CircleCheck, CircleX, Globe, Languages, RefreshCw, ScanText } from "lucide-react";
 import { api, type Health, type Settings } from "../api";
 import AppearancePicker from "../components/AppearancePicker";
+import ImageSettings from "../components/ImageSettings";
 
 const OCR_LABELS: Record<string, string> = {
   paddle_local: "Built in (GPU, this app)",
@@ -112,6 +113,8 @@ export default function SettingsPage() {
                 <input defaultValue={s.ollama_url} onBlur={(e) => e.target.value !== s.ollama_url && save({ ollama_url: e.target.value })} />
               </label>
             </section>
+
+            <ImageSettings s={s} save={save} />
 
             <section className="card form">
               <h2 className="with-icon">

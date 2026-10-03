@@ -88,6 +88,16 @@ export interface Settings {
   languages: { code: string; name: string; native: string }[];
   scan_languages: string[];
   translate_to: string;
+  images: { max_edge: number; resize_quality: number; page_dpi: number; page_quality: number };
+  export: { preset: string; dpi: number; quality: number; effective: [number, number] };
+  defaults: { images: Record<string, number>; export: Record<string, number | string> };
+  presets: Record<string, { dpi: number; quality: number }>;
+  page_dpis: number[];
+}
+
+export interface UploadConfig {
+  max_edge: number; // 0 = keep every pixel
+  resize_quality: number;
 }
 
 export interface Health {
@@ -162,6 +172,7 @@ export const api = {
   patchPage: (id: string, pid: string, patch: Partial<Pick<Page, "corners" | "rotation" | "filter">>) =>
     req<Page>("PATCH", `${d(id)}/pages/${pid}`, patch),
   autodetect: (id: string, pid: string) => req<Page>("POST", `${d(id)}/pages/${pid}/autodetect`),
+  uploadConfig: () => req<UploadConfig>("GET", "/api/upload-config"),
   movePages: (id: string, page_ids: string[], folder_id?: string | null) =>
     req<{ document: Doc; positions: number[]; source: Doc }>("POST", `${d(id)}/move-pages`,
       folder_id === undefined ? { page_ids } : { page_ids, folder_id }),
@@ -171,7 +182,7 @@ export const api = {
   deletePage: (id: string, pid: string) => req<Doc>("DELETE", `${d(id)}/pages/${pid}`),
   process: (id: string) => req<Doc>("POST", `${d(id)}/process`),
   getSettings: () => req<Settings>("GET", "/api/settings"),
-  putSettings: (patch: Partial<Pick<Settings, "ollama_model" | "ollama_url" | "paddle_url">> & { ocr_engine?: string; scan_languages?: string[]; translate_to?: string }) =>
+  putSettings: (patch: Partial<Pick<Settings, "ollama_model" | "ollama_url" | "paddle_url">> & { ocr_engine?: string; scan_languages?: string[]; translate_to?: string; images?: Record<string, number>; export?: Record<string, number | string> }) =>
     req<Settings>("PUT", "/api/settings", patch),
   health: () => req<Health>("GET", "/api/health"),
   serverInfo: () => req<{ lan_url: string }>("GET", "/api/server-info"),
@@ -187,17 +198,22 @@ export const previewUrl = (id: string, p: Page, max = 1200) =>
 export const fileUrl = (id: string, kind: OutputKind, inline = false) =>
   `${d(id)}/files/${kind}${inline ? "?inline=true" : ""}`;
 
-/** Downscale a camera photo before upload, applying EXIF orientation. */
-export async function prepareImage(file: File, maxEdge = 3000): Promise<Blob> {
+/**
+ * Get a camera photo ready for upload. With no size limit a JPEG or PNG goes up exactly as it is (the server
+ * applies its EXIF orientation), so nothing is lost and nothing is re-encoded. Otherwise (a limit is set, or a
+ * format the server may not read) it is drawn upright on a canvas, shrunk to the limit, and encoded as JPEG.
+ */
+export async function prepareImage(file: File, cfg: UploadConfig = { max_edge: 0, resize_quality: 92 }): Promise<Blob> {
+  if (!cfg.max_edge && (file.type === "image/jpeg" || file.type === "image/png")) return file;
   const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const s = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+  const s = cfg.max_edge ? Math.min(1, cfg.max_edge / Math.max(bmp.width, bmp.height)) : 1;
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bmp.width * s);
   canvas.height = Math.round(bmp.height * s);
   canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
   bmp.close();
   return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", 0.92),
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("encode failed"))), "image/jpeg", cfg.resize_quality / 100),
   );
 }
 
