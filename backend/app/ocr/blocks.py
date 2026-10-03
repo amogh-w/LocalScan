@@ -15,6 +15,29 @@ ALIGN_TOLERANCE = 0.8
 FLOW_FILL = 0.8
 
 
+# A line with no real word in it (a number, a code, a rule of underscores) has nothing to translate and stays as
+# it is in the photo. A "word" is 3 or more letters, not part of a code like "04GKRU197_P". Text that runs
+# vertically (a margin note) is translated too, but as a block of its own that is drawn rotated.
+WORD = re.compile(r"(?<!\w)[^\W\d_]{3,}(?!\w)")
+VERTICAL_RATIO = 1.5
+
+
+def is_vertical(line: Line) -> bool:
+    x0, y0, x1, y1 = line["bbox"]
+    return (y1 - y0) >= VERTICAL_RATIO * (x1 - x0) and len(line["text"].strip()) >= 3
+
+
+def is_kept(line: Line) -> bool:
+    """True when the line is left untouched by the translated PDF."""
+    return not WORD.search(line["text"])
+
+
+def thickness(line: Line) -> float:
+    """How tall the letters are: the box height, or its width for vertical text."""
+    x0, y0, x1, y1 = line["bbox"]
+    return (x1 - x0) if is_vertical(line) else (y1 - y0)
+
+
 def _height(line: Line) -> float:
     return line["bbox"][3] - line["bbox"][1]
 
@@ -88,6 +111,10 @@ def _flows(lines: list[Line]) -> bool:
 
 def group_blocks(lines: list[Line], page_index: int = 0) -> list[Block]:
     lines = [l for l in merge_same_row(lines) if l["text"].strip()]
+    kept = [l for l in lines if is_kept(l)]
+    rest = [l for l in lines if not is_kept(l)]
+    vertical = [l for l in rest if is_vertical(l)]  # each its own block, never merged with horizontal text
+    lines = [l for l in rest if not is_vertical(l)]
     lines.sort(key=lambda l: (l["bbox"][1], l["bbox"][0]))
     groups: list[list[Line]] = []
     for line in lines:
@@ -111,18 +138,30 @@ def group_blocks(lines: list[Line], page_index: int = 0) -> list[Block]:
         else:
             target.append(line)
 
-    blocks: list[Block] = []
-    for g in sorted(groups, key=lambda g: (g[0]["bbox"][1], g[0]["bbox"][0])):
+    # Reading order: text blocks and kept lines (numbers, codes, vertical margin text) sorted together.
+    ordered: list[tuple[tuple[float, float], Block]] = []
+    for g in groups:
         flow = _flows(g)
-        blocks.append({
-            "id": f"p{page_index}b{len(blocks)}",
+        ordered.append(((g[0]["bbox"][1], g[0]["bbox"][0]), {
+            "id": "",
             "bbox": [min(l["bbox"][0] for l in g), min(l["bbox"][1] for l in g),
                      max(l["bbox"][2] for l in g), max(l["bbox"][3] for l in g)],
             "lines": g,
             "flow": flow,
             # Prose is reflowed; addresses, tables and lists keep their line structure.
             "text": join_text(g) if flow else "\n".join(l["text"].strip() for l in g),
-        })
+        }))
+    for l in kept:
+        ordered.append(((l["bbox"][1], l["bbox"][0]), {
+            "id": "", "bbox": list(l["bbox"]), "lines": [l], "flow": False, "text": l["text"].strip(), "keep": True,
+        }))
+    for l in vertical:
+        ordered.append(((l["bbox"][1], l["bbox"][0]), {
+            "id": "", "bbox": list(l["bbox"]), "lines": [l], "flow": False, "text": l["text"].strip(), "vertical": True,
+        }))
+    blocks = [b for _, b in sorted(ordered, key=lambda t: t[0])]
+    for i, b in enumerate(blocks):
+        b["id"] = f"p{page_index}b{i}"
     return blocks
 
 

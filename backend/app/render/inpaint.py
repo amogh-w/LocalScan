@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 
+from ..ocr.blocks import thickness
 from ..ocr.base import Line
 
 
@@ -31,7 +32,7 @@ def erase_lines(img: np.ndarray, lines: list[Line]) -> np.ndarray:
     text_mask = np.zeros(img.shape[:2], bool)
     boxes = []
     for line in lines:
-        lh = line["bbox"][3] - line["bbox"][1]
+        lh = thickness(line)  # the height of the letters, also for vertical text
         box = _pad_box(line["bbox"], img.shape, max(2.0, 0.22 * lh))  # room for descenders and accents
         boxes.append((box, lh))
         text_mask[box[1]:box[3], box[0]:box[2]] = True

@@ -329,6 +329,14 @@ def cached_translations(keys: Iterable[str]) -> dict[str, str]:
     return out
 
 
+def delete_translations(keys: Iterable[str]) -> None:
+    keys = list(dict.fromkeys(keys))
+    with db.transaction() as c:
+        for i in range(0, len(keys), 500):
+            part = keys[i:i + 500]
+            c.execute(f"DELETE FROM translation_cache WHERE key IN ({','.join('?' * len(part))})", part)
+
+
 def cache_translations(items: dict[str, str]) -> None:
     with db.transaction() as c:
         c.executemany("INSERT OR REPLACE INTO translation_cache (key, text) VALUES (?, ?)", items.items())

@@ -76,6 +76,13 @@ export interface Doc {
   outputs: Partial<Record<OutputKind, string>>;
 }
 
+/** How much of a page has a saved translation: `read` once its text was read, `done` of `total` paragraphs. */
+export interface PageTranslation {
+  read: boolean;
+  done: number;
+  total: number;
+}
+
 export interface Settings {
   translator: string;
   ollama_url: string;
@@ -180,7 +187,12 @@ export const api = {
     req<Doc>("POST", `${d(id)}/return-pages`, { page_ids, from_doc_id, positions }),
   removePages: (id: string, page_ids: string[]) => req<Doc>("POST", `${d(id)}/remove-pages`, { page_ids }),
   deletePage: (id: string, pid: string) => req<Doc>("DELETE", `${d(id)}/pages/${pid}`),
-  process: (id: string) => req<Doc>("POST", `${d(id)}/process`),
+  process: (id: string, force = false) => req<Doc>("POST", `${d(id)}/process${force ? "?force=true" : ""}`),
+  translatePage: (id: string, pid: string, force = false) =>
+    req<Doc>("POST", `${d(id)}/pages/${pid}/translate${force ? "?force=true" : ""}`),
+  clearPageTranslation: (id: string, pid: string) => req<Doc>("DELETE", `${d(id)}/pages/${pid}/translation`),
+  clearTranslations: (id: string) => req<Doc>("DELETE", `${d(id)}/translations`),
+  translationStatus: (id: string) => req<Record<string, PageTranslation>>("GET", `${d(id)}/translation-status`),
   getSettings: () => req<Settings>("GET", "/api/settings"),
   putSettings: (patch: Partial<Pick<Settings, "ollama_model" | "ollama_url" | "paddle_url">> & { ocr_engine?: string; scan_languages?: string[]; translate_to?: string; images?: Record<string, number>; export?: Record<string, number | string> }) =>
     req<Settings>("PUT", "/api/settings", patch),
@@ -189,6 +201,9 @@ export const api = {
 };
 
 export const imageUrl = (id: string, pid: string, max = 1600) => `${d(id)}/pages/${pid}/image?max=${max}`;
+
+export const translatedUrl = (id: string, pid: string, v: number | string, max = 1200) =>
+  `${d(id)}/pages/${pid}/translated?max=${max}&v=${v}`;
 
 export const previewUrl = (id: string, p: Page, max = 1200) =>
   `${d(id)}/pages/${p.id}/preview?max=${max}&v=${encodeURIComponent(

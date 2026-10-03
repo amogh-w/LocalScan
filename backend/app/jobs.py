@@ -32,7 +32,7 @@ OUTPUTS = {
     "side_by_side": "{name} (side-by-side).pdf",
 }
 
-_queue: "queue.Queue[str]" = queue.Queue()
+_queue: "queue.Queue[tuple[str, bool, list[str] | None]]" = queue.Queue()  # (document, force, pages)
 
 
 # Bump when dewarping or filters change, so cached cleaned pages (and their OCR) are rebuilt.
@@ -136,27 +136,8 @@ def page_texts(pages: list[dict]) -> list[str]:
     return ["\n\n".join(b["text"] for b in group_blocks(p.get("lines") or [], i)) for i, p in enumerate(pages)]
 
 
-def process(doc_id: str) -> None:
-    doc = storage.load_doc(doc_id)
-    pages = doc["pages"]
-    if not pages:
-        raise RuntimeError("Document has no pages")
-    n = len(pages)
-    _started[doc_id] = time.time()
-
-    # 1. Dewarp + filter, and OCR (both cached per page).
-    ocr = _OcrHolder()
-    images = []
-    for i, page in enumerate(pages):
-        _progress(doc_id, "Cleaning and reading pages", i, n,
-                  f"Page {i + 1} of {n}: straightening, cleaning and reading the text"
-                  + (" (the first page also loads the text reader, about a minute)" if i == 0 else ""))
-        images.append(prepare_page(doc_id, page, ocr))
-        _save(doc_id, pages=pages)
-
-    blocks_per_page = [group_blocks(p["lines"], i) for i, p in enumerate(pages)]
-
-    # 2. Translate everything not already cached for this model.
+def _translation_setup():
+    """The translator and the key function of the shared translation cache (model, prompt, languages, text)."""
     translator = get_translator()
     src, tgt = scan_names(), target_language().name
     tkey = translator.cache_key()
@@ -164,8 +145,46 @@ def process(doc_id: str) -> None:
     def ck(text: str) -> str:
         return hashlib.sha1(f"{tkey}|{src}|{tgt}|{text}".encode()).hexdigest()[:20]
 
-    all_blocks = [b for bl in blocks_per_page for b in bl]
-    cache = storage.cached_translations(ck(b["text"]) for b in all_blocks)  # shared by all documents
+    return translator, src, tgt, ck
+
+
+def _text_blocks(blocks: list) -> list:
+    return [b for b in blocks if not b.get("keep")]  # kept blocks (numbers, codes) are never translated
+
+
+def process(doc_id: str, force: bool = False, page_ids: list[str] | None = None) -> None:
+    """Read and translate a document and build its three PDFs.
+
+    force: translate every paragraph again instead of reusing the saved translations.
+    page_ids: only clean, read and translate these pages (no PDFs are built; the document goes back to draft,
+    since its PDFs no longer match).
+    """
+    doc = storage.load_doc(doc_id)
+    pages = doc["pages"]
+    if not pages:
+        raise RuntimeError("Document has no pages")
+    wanted = [i for i, p in enumerate(pages) if page_ids is None or p["id"] in page_ids]
+    if not wanted:
+        raise RuntimeError("Those pages are not in this document")
+    n = len(wanted)
+    _started[doc_id] = time.time()
+
+    # 1. Dewarp + filter, and OCR (both cached per page).
+    ocr = _OcrHolder()
+    images = {}
+    for k, i in enumerate(wanted):
+        _progress(doc_id, "Cleaning and reading pages", k, n,
+                  f"Page {i + 1} of {len(pages)}: straightening, cleaning and reading the text"
+                  + (" (the first page also loads the text reader, about a minute)" if k == 0 else ""))
+        images[i] = prepare_page(doc_id, pages[i], ocr)
+        _save(doc_id, pages=pages)
+
+    blocks_per_page = {i: group_blocks(pages[i]["lines"], i) for i in wanted}
+
+    # 2. Translate everything not already cached for this model (everything, when forced).
+    translator, src, tgt, ck = _translation_setup()
+    all_blocks = [b for i in wanted for b in _text_blocks(blocks_per_page[i])]
+    cache = {} if force else storage.cached_translations(ck(b["text"]) for b in all_blocks)  # shared by all documents
     todo = [b for b in all_blocks if ck(b["text"]) not in cache]
     if todo:
         reused = len(all_blocks) - len(todo)
@@ -182,11 +201,17 @@ def process(doc_id: str) -> None:
         storage.cache_translations(new)
         cache.update(new)
 
+    if page_ids is not None:  # a few pages only: they are translated, the PDFs are rebuilt by "translate all"
+        _started.pop(doc_id, None)
+        _save(doc_id, pages=pages, status="draft", progress=None, error=None)
+        return
+
     # 3. Render the three PDFs.
     _progress(doc_id, "Building PDFs", 0, 3, "Building the original PDF")
     render_pages = [
-        RenderPage(img, bl, [cache.get(ck(b["text"]), b["text"]) for b in bl])  # untranslated: show the source
-        for img, bl in zip(images, blocks_per_page)
+        RenderPage(images[i], blocks_per_page[i],
+                   [b["text"] if b.get("keep") else cache.get(ck(b["text"]), b["text"]) for b in blocks_per_page[i]])  # untranslated: show the source
+        for i in wanted
     ]
     with tempfile.TemporaryDirectory(prefix="localscan-") as tmp:
         out = {k: Path(tmp) / f"{k}.pdf" for k in OUTPUTS}
@@ -203,11 +228,69 @@ def process(doc_id: str) -> None:
     storage.collect_garbage()  # previous PDFs and replaced cleaned pages
 
 
+def _read_pages(doc_id: str, page_ids: list[str] | None) -> list[dict]:
+    pages = storage.load_doc(doc_id)["pages"]
+    return [p for p in pages if page_ids is None or p["id"] in page_ids]
+
+
+def clear_translations(doc_id: str, page_ids: list[str] | None = None) -> int:
+    """Forget the saved translations of these pages (all pages by default), so they are translated again.
+
+    A paragraph that other pages or documents also contain loses its translation there too, and is simply
+    translated again when needed. Only the current model and language pair are affected. Returns how many
+    paragraphs were forgotten.
+    """
+    _, _, _, ck = _translation_setup()
+    keys = {ck(b["text"]) for p in _read_pages(doc_id, page_ids) if p.get("lines") is not None
+            for b in _text_blocks(group_blocks(p["lines"]))}
+    storage.delete_translations(keys)
+    return len(keys)
+
+
+def translation_status(doc_id: str) -> dict[str, dict]:
+    """Per page: how many of its paragraphs have a saved translation. `read` is False until the page's text has
+    been read (translating the page reads it)."""
+    _, _, _, ck = _translation_setup()
+    per_page = {}
+    for p in storage.load_doc(doc_id)["pages"]:
+        if p.get("lines") is None:
+            per_page[p["id"]] = (False, [])
+        else:
+            per_page[p["id"]] = (True, [ck(b["text"]) for b in _text_blocks(group_blocks(p["lines"]))])
+    cache = storage.cached_translations(k for _, keys in per_page.values() for k in keys)
+    return {pid: {"read": read, "total": len(keys), "done": sum(k in cache for k in keys)}
+            for pid, (read, keys) in per_page.items()}
+
+
+def page_translations(page: dict) -> tuple[list, list[str]]:
+    """The blocks of a read page and their translations (the source text where there is none yet)."""
+    if page.get("lines") is None or not page.get("clean"):
+        raise LookupError("this page has not been read yet")
+    _, _, _, ck = _translation_setup()
+    blocks = group_blocks(page["lines"])
+    cache = storage.cached_translations(ck(b["text"]) for b in _text_blocks(blocks))
+    return blocks, [b["text"] if b.get("keep") else cache.get(ck(b["text"]), b["text"]) for b in blocks]
+
+
+def render_translated(page: dict, blocks: list, translations: list[str], size: int = 1200) -> bytes:
+    """The translated page as a JPEG: the same drawing code as the PDF, rasterised."""
+    import pymupdf as fitz
+
+    img = read_image(blobs.path(page["clean"]))
+    with tempfile.TemporaryDirectory(prefix="localscan-") as tmp:
+        pdf = Path(tmp) / "page.pdf"
+        build_translated_pdf([RenderPage(img, blocks, translations)], pdf, 150, 85)
+        with fitz.open(pdf) as doc:
+            rect = doc[0].rect
+            zoom = size / max(rect.width, rect.height)
+            return doc[0].get_pixmap(matrix=fitz.Matrix(zoom, zoom)).tobytes("jpeg", jpg_quality=85)
+
+
 def _worker() -> None:
     while True:
-        doc_id = _queue.get()
+        doc_id, force, page_ids = _queue.get()
         try:
-            process(doc_id)
+            process(doc_id, force, page_ids)
         except Exception as e:  # noqa: BLE001 - surfaced to the UI
             log.error("job %s failed\n%s", doc_id, traceback.format_exc())
             try:
@@ -218,14 +301,15 @@ def _worker() -> None:
             _queue.task_done()
 
 
-def enqueue(doc_id: str) -> None:
+def enqueue(doc_id: str, force: bool = False, page_ids: list[str] | None = None) -> None:
+    """Queue a job. force: translate every paragraph again. page_ids: only these pages (no PDFs)."""
     storage.update_doc(doc_id, status="queued", progress=None, error=None)
-    _queue.put(doc_id)
+    _queue.put((doc_id, force, page_ids))
 
 
 def start_worker() -> None:
     # Jobs interrupted by a restart go back to the queue.
     for doc in storage.list_docs():
         if doc["status"] in ("queued", "processing"):
-            _queue.put(doc["id"])
+            _queue.put((doc["id"], False, None))
     threading.Thread(target=_worker, daemon=True, name="scan-worker").start()

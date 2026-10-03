@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, ArrowRight, Camera, ChevronLeft, ChevronRight, Contrast, Crop, Eye, FileUp, Image,
   Images, Languages, LayoutGrid, ListOrdered, LoaderCircle, Maximize, Palette, RotateCcw, RotateCw, ScanSearch, ScanText,
-  FilePlus, Folder as FolderIcon, FolderInput, FolderOpen, Inbox, SlidersHorizontal, Sparkles, Split, Trash2, Undo2, X, type LucideIcon,
+  Check, FilePlus, Folder as FolderIcon, RefreshCw, FolderInput, FolderOpen, Inbox, SlidersHorizontal, Sparkles, Split, Trash2, Undo2, X, type LucideIcon,
 } from "lucide-react";
-import { api, flattenFolders, imageUrl, prepareImage, previewUrl, type Doc, type Filter, type Folder, type Page, type Point } from "../api";
+import { api, flattenFolders, imageUrl, prepareImage, previewUrl, translatedUrl, type Doc, type PageTranslation, type Filter, type Folder, type Page, type Point } from "../api";
 import ContextMenu, { type MenuItem } from "../components/ContextMenu";
 import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
@@ -38,7 +38,8 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 export default function DocPage({ id }: { id: string }) {
   const [doc, setDoc] = useState<Doc | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [mode, setMode] = useState<"crop" | "preview">("crop");
+  const [mode, setMode] = useState<"crop" | "preview" | "translated">("crop");
+  const [tstat, setTstat] = useState<Record<string, PageTranslation>>({}); // saved translation per page
   const [tab, setTab] = useState<Tab>("pages");
   const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +83,10 @@ export default function DocPage({ id }: { id: string }) {
 
   // Poll while the backend is working.
   const busy = doc?.status === "queued" || doc?.status === "processing";
+  const loadStatus = useCallback(() => api.translationStatus(id).then(setTstat).catch(() => {}), [id]);
+  useEffect(() => {
+    if (!busy) loadStatus(); // after every job, and on opening the document
+  }, [busy, loadStatus, doc?.pages.length]);
   useEffect(() => {
     if (!busy) return;
     const t = setInterval(() => api.getDoc(id).then(setDoc).catch(() => {}), 1500);
@@ -122,6 +127,12 @@ export default function DocPage({ id }: { id: string }) {
   }
 
   const page = doc.pages.find((p) => p.id === selected) ?? null;
+  const stat = page ? tstat[page.id] : undefined;
+  const translatedPage = (s?: PageTranslation) => !!s && s.read && s.total > 0 && s.done === s.total;
+  // A page is done when its text was read and every paragraph has a translation (a page with no text is done).
+  const pageDone = (s?: PageTranslation) => !!s && s.read && s.done === s.total;
+  const doneCount = doc.pages.filter((p) => pageDone(tstat[p.id])).length;
+  const remaining = doc.pages.length - doneCount;
   const index = page ? doc.pages.indexOf(page) : -1;
 
   const updatePage = (p: Page, patch: Partial<Pick<Page, "corners" | "rotation" | "filter">>) => {
@@ -136,11 +147,35 @@ export default function DocPage({ id }: { id: string }) {
     return saveQueue.current;
   };
 
-  const translate = () =>
+  /** Translate every page and build the PDFs; again = ignore the saved translations and translate it all anew. */
+  const translateAll = (again = false) =>
     run(async () => {
       await saveQueue.current; // never process before the last crop/filter change is stored
-      setDoc(await api.process(id));
+      setDoc(await api.process(id, again));
     });
+
+  const translateThisPage = (p: Page, again = false) =>
+    run(async () => {
+      await saveQueue.current;
+      setDoc(await api.translatePage(id, p.id, again));
+      setMode("translated");
+    });
+
+  const removePageTranslation = async (p: Page) => {
+    if (!window.confirm(`Remove the saved translation of page ${doc!.pages.indexOf(p) + 1}?`)) return;
+    await run(async () => {
+      setDoc(await api.clearPageTranslation(id, p.id));
+      await loadStatus();
+    });
+  };
+
+  const removeAllTranslations = async () => {
+    if (!window.confirm("Remove every saved translation of this document and its PDFs? Your pages and photos stay.")) return;
+    await run(async () => {
+      setDoc(await api.clearTranslations(id));
+      await loadStatus();
+    });
+  };
 
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -361,6 +396,7 @@ export default function DocPage({ id }: { id: string }) {
                 >
                   <img src={previewUrl(id, p, 300)} alt="" loading="lazy" />
                   <span className="num">{i + 1}</span>
+                  {translatedPage(tstat[p.id]) && <span className="tick" title="Translated"><Check /></span>}
                 </button>
               ))}
             </div>
@@ -378,6 +414,9 @@ export default function DocPage({ id }: { id: string }) {
                 <button className={mode === "preview" ? "on" : ""} onClick={() => setMode("preview")}>
                   <Eye /> Preview
                 </button>
+                <button className={mode === "translated" ? "on" : ""} onClick={() => setMode("translated")}>
+                  <Languages /> Translated
+                </button>
               </div>
               <div className="stage">
                 {mode === "crop" ? (
@@ -388,6 +427,33 @@ export default function DocPage({ id }: { id: string }) {
                     corners={page.corners}
                     onCommit={(corners) => !busy && updatePage(page, { corners })}
                   />
+                ) : mode === "translated" ? (
+                  stat && stat.done > 0 ? (
+                    <img className="preview" src={translatedUrl(id, page.id, stat.done)} alt="Translated page" />
+                  ) : (
+                    <div className="translated-empty">
+                      <div className="te-icon">{busy ? <LoaderCircle className="spin" /> : <Languages />}</div>
+                      {busy ? (
+                        <>
+                          <h3>Translating…</h3>
+                          <p>You can follow the progress in the Translate box on the right.</p>
+                        </>
+                      ) : stat?.read && stat.total === 0 ? (
+                        <>
+                          <h3>Nothing to translate</h3>
+                          <p>This page has no text, only numbers or codes, so it looks the same in every language.</p>
+                        </>
+                      ) : (
+                        <>
+                          <h3>Page {index + 1} is not translated yet</h3>
+                          <p>Translate just this page to see the English version here. The other pages are left alone.</p>
+                          <AsyncButton className="btn primary" icon={<Languages />} onClick={() => translateThisPage(page)}>
+                            Translate this page
+                          </AsyncButton>
+                        </>
+                      )}
+                    </div>
+                  )
                 ) : (
                   <img className="preview" src={previewUrl(id, page)} alt="Preview" />
                 )}
@@ -490,7 +556,7 @@ export default function DocPage({ id }: { id: string }) {
           )}
 
           {doc.pages.length > 0 && (
-            <section className="opt-group export">
+            <section className="opt-group export wide">
               <h3 className="with-icon"><Languages /> Translate</h3>
               <div className="status-row">
                 <StatusBadge doc={doc} />
@@ -504,14 +570,62 @@ export default function DocPage({ id }: { id: string }) {
                 <ProgressCard title={doc.status === "queued" ? "Waiting for its turn" : "Starting"}
                   detail={doc.status === "queued" ? "Another document is being processed first" : undefined} />
               ))}
-              {doc.status === "done" ? (
-                <PdfLinks doc={doc} layout="stack" />
-              ) : (
-                <button className="btn primary big" disabled={busy} onClick={translate}>
-                  {busy ? <LoaderCircle className="spin" /> : <Languages />}
-                  {busy ? "Working…" : `Translate ${doc.pages.length} page${doc.pages.length === 1 ? "" : "s"}`}
-                </button>
+              {page && (
+                <div className="translate-part">
+                  <h4>
+                    This page <span className="muted">(page {index + 1})</span>
+                    <span className={`state-chip${translatedPage(stat) ? " ok" : ""}`}>
+                      {translatedPage(stat) ? "Translated" : stat && stat.done > 0 ? "Partly translated" : "Not translated"}
+                    </span>
+                  </h4>
+                  <div className="tool-grid">
+                    <AsyncButton className={`btn small${translatedPage(stat) ? "" : " primary"}`} disabled={busy}
+                      icon={translatedPage(stat) ? <RefreshCw /> : <Languages />}
+                      onClick={() => translateThisPage(page, translatedPage(stat))}
+                      title={translatedPage(stat) ? "Translate this page again" : "Translate only this page"}>
+                      {translatedPage(stat) ? "Translate again" : "Translate page"}
+                    </AsyncButton>
+                    <AsyncButton className="btn small danger" disabled={busy || !stat?.done} icon={<Trash2 />}
+                      onClick={() => removePageTranslation(page)} title="Remove the saved translation of this page">
+                      Remove
+                    </AsyncButton>
+                  </div>
+                </div>
               )}
+              <div className="translate-part">
+                <h4>
+                  All pages <span className="muted">({doneCount} of {doc.pages.length} translated)</span>
+                </h4>
+                <div className="page-dots" role="group" aria-label="Translated pages">
+                  {doc.pages.map((p, i) => (
+                    <button key={p.id} type="button" onClick={() => goTo(i)}
+                      className={`page-dot${pageDone(tstat[p.id]) ? " on" : ""}${p.id === page?.id ? " cur" : ""}`}
+                      title={`Page ${i + 1}: ${pageDone(tstat[p.id]) ? "translated" : "not translated yet"}`}>
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                <div className="tool-grid">
+                  {(remaining > 0 || doc.status !== "done") && (
+                    <AsyncButton className="btn small primary span-2" disabled={busy} icon={<Languages />}
+                      onClick={() => translateAll(false)}
+                      title="Translate the pages that are not done yet, then make the three PDFs">
+                      {remaining === 0 ? "Make the PDFs"
+                        : doneCount === 0 ? `Translate all ${doc.pages.length} page${doc.pages.length === 1 ? "" : "s"}`
+                        : `Translate remaining (${remaining})`}
+                    </AsyncButton>
+                  )}
+                  <AsyncButton className="btn small" disabled={busy} icon={<RefreshCw />}
+                    onClick={() => translateAll(true)} title="Ignore the saved translations and translate every page again">
+                    Translate all again
+                  </AsyncButton>
+                  <AsyncButton className="btn small danger" disabled={busy} icon={<Trash2 />}
+                    onClick={removeAllTranslations} title="Remove every saved translation and the PDFs">
+                    Remove all
+                  </AsyncButton>
+                </div>
+              </div>
+              {doc.status === "done" && <PdfLinks doc={doc} layout="stack" />}
             </section>
           )}
           </div>

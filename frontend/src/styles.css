@@ -254,7 +254,7 @@ progress { width: 100%; height: 6px; accent-color: var(--accent); }
   margin: auto; max-width: 240px; display: flex; flex-direction: column; align-items: center; gap: 8px;
   text-align: center; color: var(--muted);
 }
-.empty-state svg { width: 2.125rem; height: 2.125rem; color: var(--icon); }
+.empty-state > svg { width: 2.125rem; height: 2.125rem; color: var(--icon); }
 .empty-state p { margin: 0; }
 
 /* Page */
@@ -580,6 +580,37 @@ a.side-item:hover, .side-item:hover { background: var(--raised); }
 .appearance h3.with-icon svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--accent); }
 .tile-foot.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .tile-foot.actions .btn { min-width: 0; padding-inline: var(--ctl-px-sm); }
+
+/* The Translated tab of a page that has no translation yet */
+.translated-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; max-width: 26rem; margin: auto;
+  padding: 28px 24px; text-align: center; background: var(--bg); border: 1px dashed var(--line); border-radius: 16px;
+}
+.translated-empty h3 { margin: 0; font-size: 1.0625rem; color: var(--text); }
+.translated-empty p { margin: 0 0 6px; color: var(--muted); font-size: 0.875rem; line-height: 1.45; }
+.te-icon {
+  display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--accent);
+}
+.te-icon svg { width: 1.75rem; height: 1.75rem; }
+
+/* Translate panel: a section per scope, and the tick on translated thumbnails */
+.translate-part { display: flex; flex-direction: column; gap: 6px; }
+.translate-part h4 { margin: 4px 0 0; font-size: 0.8125rem; font-weight: 600; color: var(--label); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.state-chip { margin-left: auto; font-size: 0.6875rem; font-weight: 600; padding: 1px 8px; border-radius: 99px; background: var(--raised); color: var(--label); }
+.state-chip.ok { color: var(--ok); }
+.page-dots { display: flex; flex-wrap: wrap; gap: 4px; }
+.page-dot {
+  min-width: 1.5rem; height: 1.5rem; padding: 0 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--raised);
+  color: var(--label); font: inherit; font-size: 0.6875rem; cursor: pointer;
+}
+.page-dot.on { background: color-mix(in srgb, var(--ok) 25%, var(--raised)); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+.page-dot.cur { outline: 2px solid var(--accent); outline-offset: 1px; }
+.thumb .tick {
+  position: absolute; right: 5px; top: 5px; display: grid; place-items: center; width: 1.25rem; height: 1.25rem;
+  border-radius: 50%; background: var(--ok); color: var(--accent-text);
+}
+.thumb .tick svg { width: 0.8rem; height: 0.8rem; }
 
 /* Picking pages and the right-click menu */
 .thumb.picked { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }

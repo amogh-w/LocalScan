@@ -8,6 +8,7 @@ import numpy as np
 import pymupdf as fitz
 
 from ..ocr.base import Block
+from ..ocr.blocks import is_vertical, thickness
 from ..scan.io import encode_jpeg
 from .inpaint import erase_lines, text_color
 
@@ -68,6 +69,15 @@ def _invisible_text(page: fitz.Page, text: str, rect: fitz.Rect) -> None:
     """Place selectable, invisible text stretched over rect (OCR text layer)."""
     if rect.width <= 1 or rect.height <= 1:
         return
+    if rect.height >= 1.5 * rect.width and len(text) >= 3:  # vertical margin text, read from bottom to top
+        fs = rect.width * 0.85
+        length = fitz.get_text_length(text, fontname="helv", fontsize=fs)
+        origin = fitz.Point(rect.x1 - rect.width * 0.2, rect.y1)
+        sx = rect.height / length if length else 1.0
+        # Turn the horizontal text a quarter turn anticlockwise about its start, stretched to the box.
+        page.insert_text(origin, text, fontname="helv", fontsize=fs, render_mode=3,
+                         morph=(origin, fitz.Matrix(0, sx, -1, 0, 0, 0)))
+        return
     fs = rect.height * 0.85
     length = fitz.get_text_length(text, fontname="helv", fontsize=fs)
     origin = fitz.Point(rect.x0, rect.y1 - rect.height * 0.2)
@@ -95,9 +105,10 @@ def line_font_size(line: dict, zoom: float) -> float:
     Much steadier than the box height, which changes with ascenders and descenders.
     """
     x0, y0, x1, y1 = line["bbox"]
-    h = (y1 - y0) * zoom
+    h = thickness(line) * zoom  # letter height; for vertical text the box width
+    length = ((y1 - y0) if is_vertical(line) else (x1 - x0)) * zoom
     unit = fitz.get_text_length(line["text"].strip(), fontname="helv", fontsize=1)
-    by_width = (x1 - x0) * zoom / unit if unit else h
+    by_width = length / unit if unit else h
     return float(np.clip(by_width, 0.55 * h, 1.0 * h))
 
 
@@ -129,10 +140,10 @@ def _css(font_size: float, line_height: float, color: tuple[int, int, int]) -> s
             f"color: rgb({r},{g},{b}); margin: 0; padding: 0;}}")
 
 
-def _fit(page: fitz.Page, own: fitz.Rect, wide: fitz.Rect, body: str, css: str) -> None:
+def _fit(page: fitz.Page, own: fitz.Rect, wide: fitz.Rect, body: str, css: str, rotate: int = 0) -> None:
     """Place text at full size in its own box, else in the free space around it, shrinking only last."""
     for rect, scale_low in ((own, 1), (wide, 1), (wide, 0.8), (wide, 0)):
-        spare, _ = page.insert_htmlbox(rect, body, css=css, scale_low=scale_low)
+        spare, _ = page.insert_htmlbox(rect, body, css=css, scale_low=scale_low, rotate=rotate)
         if spare >= 0:
             return
 
@@ -146,7 +157,7 @@ def obstacle_mask(img: np.ndarray, blocks: list[Block], zoom: float) -> np.ndarr
     for b in blocks:
         for l in b["lines"]:
             x0, y0, x1, y1 = (v * zoom for v in l["bbox"])
-            pad = (y1 - y0) * 0.3
+            pad = (x1 - x0 if is_vertical(l) else y1 - y0) * 0.3
             ink[max(0, int(y0 - pad)):int(y1 + pad) + 1, max(0, int(x0 - pad)):int(x1 + pad) + 1] = False
     # Ignore specks; keep anything the size of a logo stroke or bigger.
     ink = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_OPEN, np.ones((2, 2), np.uint8)).astype(bool)
@@ -201,13 +212,26 @@ def build_translated_pdf(pages: list[RenderPage], out: Path, dpi: int = DEFAULT_
     if title:
         doc.set_metadata({"title": title})
     for p in pages:
-        lines = [line for block in p.blocks for line in block["lines"]]
+        # Kept blocks (numbers, codes, vertical margin text) stay exactly as photographed: they are not erased,
+        # not retyped, and count as ink that translated text must not grow over.
+        text_blocks = [b for b in p.blocks if not b.get("keep")]
+        lines = [line for block in text_blocks for line in block["lines"]]
         page, zoom = _add_image_page(doc, erase_lines(p.image, lines), dpi, quality)
         boxes = grow_boxes([[v * zoom for v in b["bbox"]] for b in p.blocks], page.rect.width, page.rect.height,
-                           obstacle_mask(p.image, p.blocks, zoom))
-        sizes = snap_sizes([block_font_size(b, zoom) for b in p.blocks])
-        for block, text, box, fs in zip(p.blocks, p.translations, boxes, sizes):
+                           obstacle_mask(p.image, text_blocks, zoom))
+        active = [i for i, b in enumerate(p.blocks) if not b.get("keep")]
+        size_of = dict(zip(active, snap_sizes([block_font_size(p.blocks[i], zoom) for i in active])))
+        for i in active:
+            block, text, box, fs = p.blocks[i], p.translations[i], boxes[i], size_of[i]
             color = text_color(p.image, block["lines"][0]["bbox"])
+            if block.get("vertical"):
+                # A margin note running up the page: laid out along its length and turned a quarter turn.
+                r = _rect(block["bbox"], zoom)
+                w, h = r.width, r.height
+                own = fitz.Rect(r.x0 - w * 0.1, r.y0 - h * 0.25 - 2, r.x1 + w * 0.3, r.y1 + 2) & page.rect
+                wide = fitz.Rect(own.x0, max(0.0, own.y0 - h * 0.35), own.x1, own.y1)
+                _fit(page, own, wide, html.escape(text.strip()), _css(fs, 1.15, color), rotate=90)
+                continue
             src_lines = block["lines"]
             out_lines = text.split("\n")
 

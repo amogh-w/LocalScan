@@ -434,14 +434,68 @@ def suggest_name(doc_id: str):
 
 
 @router.post("/{doc_id}/process")
-def process_doc(doc_id: str):
+def process_doc(doc_id: str, force: bool = False):
+    """Translate every page and build the three PDFs. force: translate every paragraph again."""
     with _edit(doc_id) as doc:
         _editable(doc)
         if not doc["pages"]:
             raise HTTPException(400, "add pages first")
         doc.update(status="queued", progress=None, error=None)
-    jobs.enqueue(doc_id)
+    jobs.enqueue(doc_id, force=force)
     return doc
+
+
+@router.post("/{doc_id}/pages/{page_id}/translate")
+def translate_page(doc_id: str, page_id: str, force: bool = False):
+    """Read and translate one page. The PDFs are not rebuilt (use the translate-all button for that)."""
+    with _edit(doc_id) as doc:
+        _editable(doc)
+        _page(doc, page_id)
+        doc.update(status="queued", progress=None, error=None)
+    jobs.enqueue(doc_id, force=force, page_ids=[page_id])
+    return doc
+
+
+@router.delete("/{doc_id}/pages/{page_id}/translation")
+def clear_page_translation(doc_id: str, page_id: str):
+    """Forget the saved translation of one page; it can be translated again."""
+    with _edit(doc_id) as doc:
+        _editable(doc)
+        _page(doc, page_id)
+        _mark_dirty(doc)
+    jobs.clear_translations(doc_id, [page_id])
+    return _doc(doc_id)
+
+
+@router.delete("/{doc_id}/translations")
+def clear_translations(doc_id: str):
+    """Forget every saved translation of this document and remove its PDFs. Pages and photos stay."""
+    with _edit(doc_id) as doc:
+        _editable(doc)
+        doc.update(status="draft" if doc["status"] in ("done", "error") else doc["status"], outputs={}, error=None)
+    jobs.clear_translations(doc_id)
+    storage.collect_garbage()
+    return _doc(doc_id)
+
+
+@router.get("/{doc_id}/translation-status")
+def translation_status(doc_id: str):
+    """{page_id: {read, done, total}}: how much of each page has a saved translation."""
+    _doc(doc_id)
+    return jobs.translation_status(doc_id)
+
+
+@router.get("/{doc_id}/pages/{page_id}/translated")
+def translated_image(doc_id: str, page_id: str, max: int = Query(1200, ge=200, le=3000)):
+    """The page with its translation drawn in (what the translated PDF shows), rendered on demand."""
+    page = _page(_doc(doc_id), page_id)
+    try:
+        blocks, translations = jobs.page_translations(page)
+    except LookupError:
+        raise HTTPException(404, "this page has not been translated yet")
+    key = f"tr|{page.get('clean_key')}|{max}|{hashlib.sha1(json.dumps(translations).encode()).hexdigest()}"
+    return _cached_jpeg(key, page_id, lambda: jobs.render_translated(page, blocks, translations, max),
+                        {"Cache-Control": "no-cache"})  # revalidate: a re-translation changes it under the same URL
 
 
 @router.get("/{doc_id}/files/{kind}")

@@ -55,11 +55,26 @@ The pipeline for each document (`jobs.process`):
    or keeps its lines (addresses, sidebars, tables, lists), in which case its text holds `\n` and each
    translated line is placed on its source line. The thresholds are tuned from a real letter; see the
    constants at the top of the file.
+   **Kept lines:** a line with no real word in it (a number, a code like `04GKRU197_P`, a rule of underscores)
+   becomes its own block with `keep: True` (`blocks.is_kept`). It is not translated, not erased and not
+   retyped, so it stays exactly as photographed; its box still counts as ink the translated text must not
+   grow over. **Vertical lines** (box taller than 1.5x its width, `blocks.is_vertical`) that contain real words
+   are their own block with `vertical: True`: translated like the others, erased by their letter height
+   (`blocks.thickness`) and drawn rotated with `insert_htmlbox(rotate=90)`, reading bottom to top (PaddleOCR's
+   assumption for tall crops). The scan PDF's invisible text layer rotates every vertical line the same way.
 4. **Translate** (`translate/`): a `Translator` protocol with a registry; `OllamaTranslator` is the only
    engine. Blocks are sent as JSON `{id: text}` with a JSON-schema `format` that requires every id;
    missing ids are retried, and after that the block comes back as `None`: the render shows its source
    text, but it is not cached, so the next run tries it again. A block the model returns unchanged (a name,
    a number) is a real translation and is cached. The prompt is `SYSTEM_PROMPT` in `ollama.py`.
+   **Per page:** the translation cache is the only record of what is translated, so a page's state is derived
+   from it (`jobs.translation_status`: `read`, `done` of `total` paragraphs). `jobs.process(doc, force, page_ids)`
+   serves four actions: all pages (builds the PDFs), `force` (translate every paragraph again), and `page_ids`
+   (read and translate only those pages; no PDFs, the document goes back to draft because its PDFs no longer
+   match). `jobs.clear_translations` forgets the cache keys of some or all pages (a paragraph shared with
+   another page or document is forgotten there too and simply translated again). The queue carries
+   `(doc_id, force, page_ids)`. `GET /pages/<id>/translated` renders the page like the PDF does
+   (`jobs.render_translated`, cached in `previews`, `Cache-Control: no-cache`).
 5. **Render** (`render/`): `inpaint.py` erases the OCR'd lines with the paper colour, using inpainting
    only on busy backgrounds. `pdf.py` builds the three PDFs with PyMuPDF. Font size comes from line
    *width* (Helvetica metrics), not box height, and is snapped per page. Text goes in its own box first,
@@ -143,7 +158,9 @@ for the Library and the document screen).
   three PDF buttons when the document is done, otherwise one next step ("Review & translate", "Add pages",
   "Open to retry"). The status badge shows only while queued, processing or failed.
 - **Document** (`pages/DocPage.tsx`): three panels, Pages (thumbnail grid and adding), Page (crop editor
-  or preview, with a pager) and Options (Name, Organize, Color, Crop, Page, Translate). From 1000px wide
+  with Crop / Preview / **Translated** tabs and a pager) and Options (Name, Organize, Color, Crop, Page,
+  Translate: "This page" translate and remove, "All pages" translate all (again) and remove all, then the PDFs).
+  A green tick on a thumbnail means that page is fully translated. From 1000px wide
   all three show; below that they are tabs with a bottom bar. The editor sizes itself from its panel with
   container query units (`cqw`/`cqh`), not from the window height.
 - **PDF buttons**: `PdfLinks` in `components/common.tsx` is the only place PDFs are offered: Original,
