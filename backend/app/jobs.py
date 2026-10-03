@@ -27,8 +27,12 @@ OUTPUTS = {
 _queue: "queue.Queue[str]" = queue.Queue()
 
 
+# Bump when dewarping or filters change, so cached cleaned pages (and their OCR) are rebuilt.
+SCAN_VERSION = 2
+
+
 def clean_key(page: dict) -> str:
-    raw = json.dumps([page["file"], page["corners"], page["rotation"], page["filter"]])
+    raw = json.dumps([SCAN_VERSION, page["file"], page["corners"], page["rotation"], page["filter"]])
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Activity, ChevronLeft, CircleCheck, CircleX, Languages, RefreshCw, ScanText } from "lucide-react";
 import { api, type Health, type Settings } from "../api";
+import AppearancePicker from "../components/AppearancePicker";
 
 const OCR_LABELS: Record<string, string> = {
   paddle_local: "Built in (GPU, this app)",
@@ -38,18 +40,25 @@ export default function SettingsPage() {
   return (
     <div className="screen">
       <header className="bar">
-        <a className="icon-btn" href="#/" aria-label="Back">
-          ←
+        <a className="icon-btn" href="#/" aria-label="Back" title="Back">
+          <ChevronLeft />
         </a>
         <div className="bar-title">Settings</div>
-        {saved && <span className="muted small">Saved</span>}
+        {saved && (
+          <span className="muted small with-icon">
+            <CircleCheck /> Saved
+          </span>
+        )}
       </header>
       <main className="content">
+        <AppearancePicker />
         {error && <p className="error">{error}</p>}
         {s && (
           <>
             <section className="card form">
-              <h2>Translation (Ollama)</h2>
+              <h2 className="with-icon">
+                <Languages /> Translation (Ollama)
+              </h2>
               <label>
                 Model
                 <select value={s.ollama_model} onChange={(e) => save({ ollama_model: e.target.value })}>
@@ -69,7 +78,9 @@ export default function SettingsPage() {
             </section>
 
             <section className="card form">
-              <h2>OCR (PaddleOCR)</h2>
+              <h2 className="with-icon">
+                <ScanText /> OCR (PaddleOCR)
+              </h2>
               <label>
                 Engine
                 <select value={s.ocr} onChange={(e) => save({ ocr_engine: e.target.value })}>
@@ -99,13 +110,17 @@ export default function SettingsPage() {
         )}
 
         <section className="card form">
-          <h2>Status</h2>
+          <h2 className="with-icon">
+            <Activity /> Status
+          </h2>
           {health ? (
             <ul className="health">
               <li className={health.ocr.ok ? "ok" : "bad"}>
+                {health.ocr.ok ? <CircleCheck /> : <CircleX />}
                 <b>OCR</b> {health.ocr.detail}
               </li>
               <li className={health.translator.ok ? "ok" : "bad"}>
+                {health.translator.ok ? <CircleCheck /> : <CircleX />}
                 <b>Translator</b> {health.translator.detail}
               </li>
             </ul>
@@ -113,6 +128,7 @@ export default function SettingsPage() {
             <p className="muted">Checking…</p>
           )}
           <button className="btn small" onClick={check} disabled={checking}>
+            <RefreshCw className={checking ? "spin" : undefined} />
             {checking ? "Checking…" : "Check again"}
           </button>
         </section>

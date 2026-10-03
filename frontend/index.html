@@ -3,9 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#1d4ed8" />
+    <meta name="theme-color" content="#181825" />
     <link rel="icon" href="/icon.svg" />
     <title>Local Scan</title>
+    <script>
+      // Apply the saved Catppuccin flavor + accent before first paint (no flash). Mirrors src/theme.ts.
+      (function () {
+        var t = {};
+        try { t = JSON.parse(localStorage.getItem("localscan.theme")) || {}; } catch (e) {}
+        var f = ["latte", "frappe", "macchiato", "mocha"].indexOf(t.flavor) >= 0 ? t.flavor
+          : (matchMedia("(prefers-color-scheme: dark)").matches ? "mocha" : "latte");
+        var h = document.documentElement;
+        h.classList.add(f);
+        h.style.setProperty("--accent", "var(--ctp-" + (/^[a-z]+$/.test(t.accent || "") ? t.accent : "blue") + ")");
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

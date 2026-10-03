@@ -38,7 +38,10 @@ Ollama don't compete for the GPU.
 
 The pipeline for each document (`jobs.process`):
 1. **Scan** (`scan/`): corners are detected on upload (`detect.py`). `warp.py` does the perspective
-   correction, recovering the real aspect ratio (Zhang & He whiteboard method, snapped to A4), then
+   correction, recovering the real aspect ratio (Zhang & He whiteboard method, snapped to A4). The
+   focal length estimated from the quad is used only within `PLAUSIBLE_FOCAL`; otherwise
+   `TYPICAL_FOCAL` is assumed, because straight-on photos make the estimate blow up and squeeze the
+   page. After that,
    applies the filters. "Auto" = shadow removal by dividing by a large max-filter background, then a
    per-page white point measured from the paper.
 2. **OCR** (`ocr/`): an `OcrEngine` protocol with a registry. `paddle_local` runs PaddleOCR in-process
@@ -61,6 +64,15 @@ The pipeline for each document (`jobs.process`):
 The frontend (`frontend/src`) is React + Vite + TypeScript with hash routing (`#/`, `#/doc/<id>`,
 `#/settings`). `components/CornerEditor.tsx` is the 4-corner editor with a loupe. `api.ts` holds all
 API calls and types.
+
+**Theming is Catppuccin only.** `src/catppuccin.css` is the official palette (v1.8.0) as `--ctp-*`
+variables, one class per flavor. `styles.css` maps the app's tokens onto Catppuccin roles: `--bg` base,
+`--card` mantle, `--raised` surface0/1, `--text`/`--label`/`--muted` text/subtext1/subtext0, `--danger`
+red, `--ok` green, `--warn` yellow, and `--accent` the user's chosen accent. Use those tokens or
+`var(--ctp-*)`; never write raw hex or rgba in styles. The one exception is the QR code background, kept
+at Latte base so it stays scannable. `src/theme.ts` applies the flavor class and `--accent` to `<html>`
+and stores the choice per device in localStorage. The inline script in `index.html` applies it before
+first paint, so keep the two in sync. The picker is `components/AppearancePicker.tsx`, shown in Settings.
 
 ## Data and caching
 
@@ -86,6 +98,11 @@ API calls and types.
   limits resolution to Windows.
 - **Port 8010**, not 8000: `~/Projects/Paddle/start_server.bat` (the user's separate OCR server) kills
   whatever listens on 8000.
+- Cached cleaned pages are keyed by `jobs.SCAN_VERSION` too: bump it whenever the dewarp or filter
+  code changes, or old documents keep their stale images.
+- On Windows the dev servers' file watchers sometimes miss changes: Vite has served stale modules, and
+  `uvicorn --reload` has kept old backend code. If a change doesn't show up, touch the file or restart
+  the backend before debugging further.
 - OCR models load lazily on the first page (about a minute of GPU warm-up), and every backend reload
   unloads them.
 - `paddlex` depends on `opencv-contrib-python`, so that is the cv2 package here as well; never add

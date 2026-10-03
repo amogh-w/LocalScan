@@ -12,12 +12,21 @@ EDGE_TRIM = 0.004
 A4_RATIO = 2 ** 0.5
 
 
+# Focal length in units of the photo's long side. Phone main cameras (24-28 mm equivalent) are ~1.0;
+# anything outside the plausible range comes from an ill-conditioned estimate, not a real lens.
+TYPICAL_FOCAL = 1.0
+PLAUSIBLE_FOCAL = (0.5, 2.5)
+
+
 def true_aspect(src: np.ndarray, img_w: int, img_h: int) -> float | None:
     """Estimate the real width/height ratio of a photographed rectangle.
 
-    Zhang & He, "Whiteboard scanning and image enhancement" (2007): recovers the focal length
-    from the quad, assuming square pixels and the principal point at the image centre.
-    Returns None when the geometry is degenerate (e.g. a near fronto-parallel photo).
+    Zhang & He, "Whiteboard scanning and image enhancement" (2007), assuming square pixels and the
+    principal point at the image centre. The method can also estimate the focal length from the
+    quad, but that estimate is unstable when the photo is taken nearly straight on: a real letter
+    gave 8.8x the long side and squeezed A4 to 0.54. So the estimate is used only when it is
+    physically plausible; otherwise a typical phone focal length is assumed. The ratio barely
+    depends on the exact focal length within the plausible range (0.709-0.714 for that letter).
     """
     u0, v0 = img_w / 2, img_h / 2
     tl, tr, br, bl = src
@@ -25,11 +34,12 @@ def true_aspect(src: np.ndarray, img_w: int, img_h: int) -> float | None:
     k2 = np.dot(np.cross(m1, m4), m3) / np.dot(np.cross(m2, m4), m3)
     k3 = np.dot(np.cross(m1, m4), m2) / np.dot(np.cross(m3, m4), m2)
     n2, n3 = k2 * m2 - m1, k3 * m3 - m1
-    if abs(n2[2] * n3[2]) < 1e-9:
-        return float(np.hypot(n2[0], n2[1]) / np.hypot(n3[0], n3[1]))  # affine case
-    f2 = -(n2[0] * n3[0] + n2[1] * n3[1]) / (n2[2] * n3[2])
-    if f2 <= 0:
-        return None
+    long_side = max(img_w, img_h)
+    f2 = (TYPICAL_FOCAL * long_side) ** 2
+    if abs(n2[2] * n3[2]) > 1e-12:
+        est = -(n2[0] * n3[0] + n2[1] * n3[1]) / (n2[2] * n3[2])
+        if (PLAUSIBLE_FOCAL[0] * long_side) ** 2 <= est <= (PLAUSIBLE_FOCAL[1] * long_side) ** 2:
+            f2 = est
     w2 = (n2[0] ** 2 + n2[1] ** 2) / f2 + n2[2] ** 2
     h2 = (n3[0] ** 2 + n3[1] ** 2) / f2 + n3[2] ** 2
     ratio = float(np.sqrt(w2 / h2))

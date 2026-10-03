@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from app.scan.detect import FULL_IMAGE, detect_corners
 from app.scan.warp import FILTERS, apply_filter, process_page, rotate, warp
@@ -19,6 +20,16 @@ def test_warp_produces_upright_page(photo):
     out = warp(img, truth.tolist())
     h, w = out.shape[:2]
     assert h > w and abs(h / w - 1.414) < 0.08
+
+
+@pytest.mark.parametrize("tilt", [(0.5, -0.3, 0.2), (2, 1, 0), (4, -3, 1), (12, 6, 2), (25, -10, 5)])
+def test_true_aspect_is_a4_from_straight_on_to_steep(tilt):
+    """Near straight-on shots used to blow up the focal estimate and squeeze A4 (regression)."""
+    from conftest import project_page
+    from app.scan.warp import true_aspect
+    from app.scan.detect import order_points
+    quad = order_points(project_page(3000, 4000, *tilt))
+    assert abs(true_aspect(quad, 3000, 4000) - 0.7071) < 0.02
 
 
 def test_rotate_and_filters(photo):

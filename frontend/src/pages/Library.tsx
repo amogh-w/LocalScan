@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+import { ExternalLink, FileText, Plus, Settings, Smartphone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, fileUrl, type Doc } from "../api";
 import { Downloads, StatusBadge } from "../components/common";
@@ -45,19 +46,21 @@ export default function Library() {
     <div className="screen">
       <header className="bar">
         <h1>Local Scan</h1>
-        <a className="icon-btn" href="#/settings" aria-label="Settings">
-          ⚙
+        <a className="icon-btn" href="#/settings" aria-label="Settings" title="Settings">
+          <Settings />
         </a>
       </header>
 
       <main className="content">
         <button className="btn primary big" onClick={newScan}>
-          + New scan
+          <Plus /> New scan
         </button>
 
         {qr && (
           <details className="card qr-card">
-            <summary>Scan from your phone</summary>
+            <summary className="with-icon">
+              <Smartphone /> Scan from your phone
+            </summary>
             <div className="qr" dangerouslySetInnerHTML={{ __html: qr.svg }} />
             <p className="muted">
               Same Wi-Fi, open <code>{qr.url}</code>
@@ -75,7 +78,9 @@ export default function Library() {
                 {d.pages[0] ? (
                   <img className="doc-thumb" src={`/api/docs/${d.id}/pages/${d.pages[0].id}/image?max=200`} alt="" />
                 ) : (
-                  <div className="doc-thumb empty" />
+                  <div className="doc-thumb empty">
+                    <FileText />
+                  </div>
                 )}
                 <div>
                   <div className="doc-name">{d.name}</div>
@@ -89,7 +94,7 @@ export default function Library() {
               {d.status === "done" && d.outputs.translated && (
                 <div className="doc-actions">
                   <a className="btn small" href={fileUrl(d.id, "translated", true)} target="_blank">
-                    Open English
+                    <ExternalLink /> Open English
                   </a>
                 </div>
               )}
