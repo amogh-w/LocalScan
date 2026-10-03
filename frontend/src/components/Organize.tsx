@@ -50,7 +50,7 @@ export default function Organize({ doc, onChange, onError }: Props) {
   const available = tags.filter((t) => !current.includes(t.id));
 
   return (
-    <section className="opt-group organize">
+    <section className="opt-group organize wide">
       <h3 className="with-icon"><FolderTree /> Organize</h3>
       <label className="field">
         <span className="field-label">Folder</span>

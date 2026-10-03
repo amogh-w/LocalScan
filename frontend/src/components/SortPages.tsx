@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Inbox, ListOrdered, LoaderCircle, Sparkles, TriangleAlert, X } from "lucide-react";
+import ProgressCard from "./ProgressCard";
 import { api, previewUrl, type Confidence, type Doc, type SortProposal } from "../api";
 
 export type SortResult =
@@ -44,25 +45,30 @@ export default function SortPages({ doc, split, onClose, onApplied }: {
   const [applying, setApplying] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [step, setStep] = useState<{ stage?: string; done?: number; total?: number }>({});
-  const closed = useRef(false);
 
   useEffect(() => {
-    closed.current = false;
+    let cancelled = false; // a later run (the mode was switched) must not be overwritten by this one
+    setProposal(null);
+    setRows([]);
+    setTray([]);
+    setError("");
+    setSeconds(0);
+    setStep({});
     const timer = window.setInterval(() => {
       setSeconds((s) => s + 1);
-      api.sortProgress(doc.id).then((p) => !closed.current && setStep(p), () => {});
+      api.sortProgress(doc.id).then((p) => !cancelled && setStep(p), () => {});
     }, 1000);
     api.sortPages(doc.id, split).then(
       (p) => {
-        if (closed.current) return;
+        if (cancelled) return;
         setProposal(p);
         const next = rowsFrom(p);
         setRows(next.rows);
         setTray(next.tray);
       },
-      (e) => !closed.current && setError(e instanceof Error ? e.message : String(e)),
+      (e) => !cancelled && setError(e instanceof Error ? e.message : String(e)),
     ).finally(() => window.clearInterval(timer));
-    return () => { closed.current = true; window.clearInterval(timer); };
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, [doc.id, split]);
 
   const pageById = useMemo(() => new Map(doc.pages.map((p) => [p.id, p])), [doc.pages]);
@@ -124,13 +130,9 @@ export default function SortPages({ doc, split, onClose, onApplied }: {
 
         <div className="sheet-body">
           {loading && (
-            <div className="sort-loading" role="status">
-              <p className="muted with-icon">
-                <LoaderCircle className="spin" /> {step.stage ?? "Starting"}
-                {step.total ? ` (${step.done ?? 0}/${step.total})` : ""} - {seconds}s
-              </p>
-              <progress max={step.total || 1} value={step.total ? step.done ?? 0 : undefined} />
-            </div>
+            <ProgressCard title={step.stage ?? "Starting"} elapsed={seconds}
+              detail={step.total ? `${step.done ?? 0} of ${step.total}` : `${doc.pages.length} pages`}
+              percent={step.total ? Math.round(100 * (step.done ?? 0) / step.total) : undefined} />
           )}
           {error && <p className="error" role="alert"><TriangleAlert /> {error}</p>}
           {proposal?.message && <p className="sort-note"><TriangleAlert /> {proposal.message}</p>}

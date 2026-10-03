@@ -107,6 +107,16 @@ existing `page_order` PATCH. Limit: `MAX_PAGES` = 40, text only.
 - `scripts/sort_benchmark.py` runs synthetic documents (never real letters) through the real model. It is
   slow, so do not run it in loops; unit tests use a fake model (`tests/test_sort.py`).
 
+### Languages (`languages.py`)
+
+Settings > Languages picks the scan language and the translation language (`[languages]` in `config.toml`; scan is a list, translate_to a single code,
+saved to `data/settings.json`). The pair applies globally: the translation prompt and cache (languages are
+in the key), the AI naming prompt (`{src}`, `{tgt}`), and the OCR model (`Language.ocr`, passed to PaddleOCR;
+empty = the default models). To add a language, add one `Language(...)` to `LANGUAGES`; Settings lists it
+automatically. Gaps: other prompts (sorting) and the PDF fonts assume Latin text, so a non-Latin language
+needs a font in `render/` and a PaddleOCR model that is installed. The pair must differ (the API rejects
+equal ones).
+
 ## Frontend
 
 React + Vite + TypeScript (`frontend/src`) with hash routing: `#/`, `#/unfiled`, `#/folder/<id>`,
@@ -135,7 +145,7 @@ variables, one class per flavor. `styles.css` maps the app's tokens onto Catppuc
 `--card` mantle, `--raised` surface0/1, `--text`/`--label`/`--muted` text/subtext1/subtext0, `--danger`
 red, `--ok` green, `--warn` yellow, and `--accent` the user's chosen accent. Use those tokens or
 `var(--ctp-*)`; never write raw hex or rgba in styles. The one exception is the QR code background, kept
-at Latte base so it stays scannable. `src/theme.ts` applies the flavor class and `--accent` to `<html>`
+at Latte base so it stays scannable. `src/theme.ts` applies the flavor class, `--accent` and the text size (`font-size` on `<html>`; sizes are in rem so everything scales) to `<html>`
 and stores the choice per device in localStorage. The inline script in `index.html` applies it before
 first paint, so keep the two in sync. The picker is `components/AppearancePicker.tsx`, shown in Settings.
 

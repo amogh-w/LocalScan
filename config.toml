@@ -19,10 +19,12 @@ url = "http://localhost:8000/ocr"
 request = "multipart"
 timeout = 120
 
+[languages]            # codes from backend/app/languages.py; changed on the Settings page
+scan = ["de"]          # the languages your letters may be written in (one or more)
+translate_to = "en"    # the language of translations and AI names
+
 [translator]
 engine = "ollama"
-source_lang = "German"
-target_lang = "English"
 
 [translator.ollama]
 url = "http://localhost:11434"

@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ..config import settings
+from ..languages import LANGUAGES, scan_languages, target_language
 from ..ocr.registry import ENGINES as OCR_ENGINES, get_ocr
 from ..translate.ollama import OllamaTranslator
 from ..translate.registry import get_translator
@@ -40,6 +41,8 @@ class SettingsPatch(BaseModel):
     ollama_model: str | None = None
     ollama_url: str | None = None
     paddle_url: str | None = None
+    scan_languages: list[str] | None = None
+    translate_to: str | None = None
 
 
 @router.get("/settings")
@@ -61,6 +64,9 @@ def get_settings():
         "ocr": v["ocr"]["engine"],
         "ocr_engines": list(OCR_ENGINES),
         "paddle_url": v["ocr"]["paddle_http"]["url"],
+        "languages": [{"code": l.code, "name": l.name, "native": l.native} for l in LANGUAGES.values()],
+        "scan_languages": [l.code for l in scan_languages()],
+        "translate_to": target_language().code,
     }
 
 
@@ -84,5 +90,16 @@ def put_settings(body: SettingsPatch):
         if not body.paddle_url.startswith("http"):
             raise HTTPException(400, "URL must start with http")
         patch.setdefault("ocr", {})["paddle_http"] = {"url": body.paddle_url}
+    if body.scan_languages is not None or body.translate_to is not None:
+        scan = body.scan_languages if body.scan_languages is not None else [l.code for l in scan_languages()]
+        target = body.translate_to or target_language().code
+        for code in [*scan, target]:
+            if code not in LANGUAGES:
+                raise HTTPException(400, f"unknown language {code!r}")
+        if not scan:
+            raise HTTPException(400, "Choose at least one scan language")
+        if scan == [target]:
+            raise HTTPException(400, "There is nothing to translate when the only scan language is the translation language")
+        patch["languages"] = {"scan": list(dict.fromkeys(scan)), "translate_to": target}
     settings.update(patch)
     return get_settings()

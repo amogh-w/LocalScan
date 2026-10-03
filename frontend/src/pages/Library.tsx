@@ -9,7 +9,7 @@ import { AiRenameButton, AiSuggestion, useAiRename } from "../components/AiRenam
 import NameEditor from "../components/NameEditor";
 import Sidebar, { DOC_DRAG_TYPE } from "../components/Sidebar";
 import TagChip from "../components/TagChip";
-import { PdfLinks, StatusBadge } from "../components/common";
+import { AsyncButton, PdfLinks, StatusBadge } from "../components/common";
 
 const isPhone = matchMedia("(pointer: coarse)").matches;
 
@@ -140,15 +140,15 @@ export default function Library({ view }: { view: LibraryView }) {
               {title.icon} {title.text} <span className="muted small">{shown.length}</span>
             </h2>
             {view.kind === "trash" ? (
-              <button className="btn danger" disabled={!trashed.length}
+              <AsyncButton className="btn danger" disabled={!trashed.length} icon={<Trash2 />}
                 onClick={() => window.confirm(`Delete ${trashed.length} document${trashed.length === 1 ? "" : "s"} for good? This cannot be undone.`)
                   && act(() => api.emptyTrash())}>
-                <Trash2 /> Empty trash
-              </button>
+                Empty trash
+              </AsyncButton>
             ) : (
-              <button className="btn primary" onClick={newScan}>
-                <Plus /> New scan
-              </button>
+              <AsyncButton className="btn primary" onClick={newScan} icon={<Plus />}>
+                New scan
+              </AsyncButton>
             )}
           </div>
 
@@ -203,7 +203,7 @@ export default function Library({ view }: { view: LibraryView }) {
 
 function BulkBar(p: {
   count: number; folders: FolderT[]; tags: Tag[]; onClear: () => void; onSelectAll: () => void;
-  onMove: (folderId: string | null) => void; onTag: (tagId: string) => void; onDelete: () => void;
+  onMove: (folderId: string | null) => void; onTag: (tagId: string) => void; onDelete: () => unknown;
 }) {
   return (
     <div className="bulk-bar" role="toolbar" aria-label="Selected documents">
@@ -228,9 +228,9 @@ function BulkBar(p: {
           ))}
         </select>
       </label>
-      <button className="btn small danger" onClick={p.onDelete}>
-        <Trash2 /> Move to trash
-      </button>
+      <AsyncButton className="btn small danger" onClick={p.onDelete} icon={<Trash2 />}>
+        Move to trash
+      </AsyncButton>
       <button className="icon-btn" onClick={p.onClear} aria-label="Clear selection" title="Clear selection">
         <X />
       </button>
@@ -238,7 +238,7 @@ function BulkBar(p: {
   );
 }
 
-function TrashCard({ doc: d, onRestore, onPurge }: { doc: Doc; onRestore: () => void; onPurge: () => void }) {
+function TrashCard({ doc: d, onRestore, onPurge }: { doc: Doc; onRestore: () => unknown; onPurge: () => unknown }) {
   const first = d.pages[0];
   const left = Math.max(0, 30 - Math.floor((Date.now() / 1000 - (d.deleted_at ?? 0)) / 86400));
   return (
@@ -253,9 +253,9 @@ function TrashCard({ doc: d, onRestore, onPurge }: { doc: Doc; onRestore: () => 
           {d.pages.length} page{d.pages.length === 1 ? "" : "s"} · deleted for good in {left} day{left === 1 ? "" : "s"}
         </div>
       </div>
-      <div className="tile-foot">
-        <button className="btn small" onClick={onRestore}><RotateCcw /> Restore</button>
-        <button className="btn small danger" onClick={onPurge}><Trash2 /> Delete forever</button>
+      <div className="tile-foot actions">
+        <AsyncButton onClick={onRestore} icon={<RotateCcw />}>Restore</AsyncButton>
+        <AsyncButton className="btn small danger" onClick={onPurge} icon={<Trash2 />}>Delete forever</AsyncButton>
       </div>
     </li>
   );

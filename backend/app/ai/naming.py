@@ -4,6 +4,7 @@ from datetime import date
 from typing import Any
 
 from ..config import settings
+from ..languages import scan_names, target_language
 from ..translate.ollama import OllamaTranslator
 
 # Characters of letter text sent to the model (about 6k tokens, well inside its 16k context). Longer
@@ -11,7 +12,7 @@ from ..translate.ollama import OllamaTranslator
 TEXT_BUDGET = 20000
 MAX_NAME_CHARS = 90
 SYSTEM_PROMPT = """You name scanned letters for a personal document archive.
-You get the OCR text of a letter (usually German), page by page; it may have several pages. The first \
+You get the OCR text of a letter (usually {src}), page by page; it may have several pages. The first \
 page usually carries the date, the sender and the subject line; later pages add detail, so use them when \
 the first page does not make the subject clear. Reply with JSON:
 - "date": the date the letter was written, as YYYY-MM-DD. Use the date printed in the letter head or \
@@ -19,9 +20,9 @@ next to the place name, not deadlines, payment dates or periods mentioned in the
 - "sender": who sent it, in the short form people use: an abbreviation if the letter uses one \
 (e.g. "LBV NRW", "AOK Rheinland", "Finanzamt Aachen", "Deutsche Bank"). Drop legal forms such as \
 GmbH, AG, KG, e.V. Keep proper names in their original language. Never the recipient.
-- "subject": what the letter is about, in English, 2 to 6 words, sentence case, no final period \
-(e.g. "Repayment of overpaid benefits", "Change of monthly payment", "Tax assessment 2025"). \
-If the letter has a subject line (Betreff, often bold above the salutation), base it on that. \
+- "subject": what the letter is about, in {tgt}, 2 to 6 words, sentence case, no final period \
+(examples in English: "Repayment of overpaid benefits", "Change of monthly payment", "Tax assessment 2025"). \
+If the letter has a subject line (e.g. German "Betreff", often bold above the salutation), base it on that. \
 Say only what the text says; do not guess the kind of contract or service.
 
 Never include the recipient's name, address, account or reference numbers. JSON only."""
@@ -99,6 +100,6 @@ def suggest_name(pages: list[str] | str) -> dict[str, str]:
     if not prompt:
         raise ValueError("No text found on the pages yet")
     llm = OllamaTranslator(**settings.section("translator", "ollama"))
-    reply = llm.chat_json(SYSTEM_PROMPT, prompt, SCHEMA)
+    reply = llm.chat_json(SYSTEM_PROMPT.format(src=scan_names(), tgt=target_language().name), prompt, SCHEMA)
     fields = {k: str(reply.get(k, "")) for k in ("date", "sender", "subject")}
     return {**fields, "date": _valid_date(fields["date"]), "name": build_name(fields)}

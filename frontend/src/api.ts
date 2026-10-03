@@ -71,7 +71,7 @@ export interface Doc {
   deleted_at?: number | null;
   pages: Page[];
   status: Status;
-  progress: { step: string; done: number; total: number } | null;
+  progress: { step: string; done: number; total: number; detail?: string; percent?: number; stage?: number; stages?: number; elapsed?: number } | null;
   error: string | null;
   outputs: Partial<Record<OutputKind, string>>;
 }
@@ -85,6 +85,9 @@ export interface Settings {
   ocr: string;
   ocr_engines: string[];
   paddle_url: string;
+  languages: { code: string; name: string; native: string }[];
+  scan_languages: string[];
+  translate_to: string;
 }
 
 export interface Health {
@@ -163,7 +166,7 @@ export const api = {
   deletePage: (id: string, pid: string) => req<Doc>("DELETE", `${d(id)}/pages/${pid}`),
   process: (id: string) => req<Doc>("POST", `${d(id)}/process`),
   getSettings: () => req<Settings>("GET", "/api/settings"),
-  putSettings: (patch: Partial<Pick<Settings, "ollama_model" | "ollama_url" | "paddle_url">> & { ocr_engine?: string }) =>
+  putSettings: (patch: Partial<Pick<Settings, "ollama_model" | "ollama_url" | "paddle_url">> & { ocr_engine?: string; scan_languages?: string[]; translate_to?: string }) =>
     req<Settings>("PUT", "/api/settings", patch),
   health: () => req<Health>("GET", "/api/health"),
   serverInfo: () => req<{ lan_url: string }>("GET", "/api/server-info"),

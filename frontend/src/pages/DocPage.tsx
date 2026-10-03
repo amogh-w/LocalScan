@@ -9,8 +9,9 @@ import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
 import NameOptions from "../components/NameOptions";
 import Organize from "../components/Organize";
+import ProgressCard from "../components/ProgressCard";
 import SortPages, { type SortResult } from "../components/SortPages";
-import { PdfLinks, StatusBadge } from "../components/common";
+import { AsyncButton, PdfLinks, StatusBadge } from "../components/common";
 
 const FILTERS: { id: Filter; label: string; icon: LucideIcon }[] = [
   { id: "enhanced", label: "Auto", icon: Sparkles },
@@ -42,9 +43,6 @@ export default function DocPage({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<"split" | "order" | null>(null);
   const [sorted, setSorted] = useState<SortResult | null>(null);
-  const [hintGone, setHintGone] = useState(() => {
-    try { return localStorage.getItem(`sortHint:${id}`) === "1"; } catch { return false; }
-  });
   const dragFrom = useRef<number | null>(null);
   // Page edits are sent one at a time, in order; only the newest reply updates the screen.
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
@@ -74,11 +72,6 @@ export default function DocPage({ id }: { id: string }) {
   useEffect(() => {
     if (doc && (!selected || !doc.pages.some((p) => p.id === selected))) setSelected(doc.pages[0]?.id ?? null);
   }, [doc, selected]);
-
-  const dismissHint = () => {
-    setHintGone(true);
-    try { localStorage.setItem(`sortHint:${id}`, "1"); } catch { /* private mode */ }
-  };
 
   const applied = (result: SortResult) => {
     setSorting(null);
@@ -168,7 +161,7 @@ export default function DocPage({ id }: { id: string }) {
   };
 
   const removeDoc = async () => {
-    if (!window.confirm(`Delete "${doc.name}" and all its pages?`)) return;
+    if (!window.confirm(`Move "${doc.name}" to the trash?`)) return;
     await run(async () => {
       await api.deleteDoc(id);
       location.hash = "#/";
@@ -206,9 +199,8 @@ export default function DocPage({ id }: { id: string }) {
       <Header
         title={<DocTitle doc={doc} onChange={setDoc} onError={setError} />}
         right={
-          <button className="icon-btn" onClick={removeDoc} disabled={busy} aria-label="Delete document" title="Delete document">
-            <Trash2 />
-          </button>
+          <AsyncButton className="icon-btn" onClick={removeDoc} disabled={busy} ariaLabel="Move document to the trash"
+            title="Move document to the trash" icon={<Trash2 />} />
         }
       />
       {error && <p className="error banner">{error}</p>}
@@ -222,17 +214,8 @@ export default function DocPage({ id }: { id: string }) {
           </div>
           {addButtons}
           {uploading && (
-            <p className="muted small with-icon">
-              <LoaderCircle className="spin" /> Uploading {uploading.done}/{uploading.total}…
-            </p>
-          )}
-          {doc.pages.length >= 3 && !hintGone && !busy && (
-            <div className="suggestion sort-hint" role="note">
-              <Split className="sparkle" />
-              <span className="suggestion-name">Several documents in this scan?</span>
-              <button className="btn small primary" onClick={() => setSorting("split")}>Sort with AI</button>
-              <button className="icon-btn" onClick={dismissHint} aria-label="Dismiss" title="Dismiss"><X /></button>
-            </div>
+            <ProgressCard title="Uploading photos" detail={`${uploading.done} of ${uploading.total} done`}
+              percent={Math.round(100 * uploading.done / Math.max(1, uploading.total))} />
           )}
           {doc.pages.length === 0 ? (
             <div className="empty-state">
@@ -309,6 +292,7 @@ export default function DocPage({ id }: { id: string }) {
 
         {/* Options: color, crop, other actions, then translate/export */}
         <aside className="panel options-panel">
+          <div className="options-panel-grid">
           <NameOptions doc={doc} onChange={setDoc} onError={setError} />
           <Organize doc={doc} onChange={setDoc} onError={setError} />
           {page && (
@@ -328,13 +312,13 @@ export default function DocPage({ id }: { id: string }) {
               <section className="opt-group">
                 <h3 className="with-icon"><Crop /> Crop</h3>
                 <div className="tool-grid">
-                  <button className="btn small" disabled={busy} title="Detect the page edges again"
+                  <AsyncButton disabled={busy} title="Detect the page edges again" icon={<ScanSearch />}
                     onClick={() => run(async () => {
                       const saved = await api.autodetect(id, page.id);
                       setDoc((d) => d && { ...d, pages: d.pages.map((q) => (q.id === page.id ? saved : q)) });
                     })}>
-                    <ScanSearch /> Detect
-                  </button>
+                    Detect
+                  </AsyncButton>
                   <button className="btn small" disabled={busy} title="Use the whole photo"
                     onClick={() => updatePage(page, { corners: FULL })}>
                     <Maximize /> Full
@@ -365,7 +349,7 @@ export default function DocPage({ id }: { id: string }) {
                     <>
                       <button className="btn small" disabled={busy} onClick={() => setSorting("split")}
                         title="Find the documents in this scan and put their pages in order">
-                        <Split /> Sort with AI
+                        <Split /> Sort
                       </button>
                       <button className="btn small" disabled={busy} onClick={() => setSorting("order")}
                         title="Keep one document, fix the page order">
@@ -373,9 +357,9 @@ export default function DocPage({ id }: { id: string }) {
                       </button>
                     </>
                   )}
-                  <button className="btn small danger span-2" disabled={busy} onClick={() => removePage(page)}>
-                    <Trash2 /> Delete page
-                  </button>
+                  <AsyncButton className="btn small danger span-2" disabled={busy} onClick={() => removePage(page)} icon={<Trash2 />}>
+                    Delete page
+                  </AsyncButton>
                 </div>
               </section>
             </>
@@ -388,7 +372,14 @@ export default function DocPage({ id }: { id: string }) {
                 <StatusBadge doc={doc} />
                 {doc.status === "error" && <span className="error small">{doc.error}</span>}
               </div>
-              {busy && doc.progress && <progress max={Math.max(1, doc.progress.total)} value={doc.progress.done} />}
+              {busy && (doc.progress ? (
+                <ProgressCard title={doc.progress.step} detail={doc.progress.detail} percent={doc.progress.percent}
+                  step={doc.progress.stage ? `Step ${doc.progress.stage} of ${doc.progress.stages}` : undefined}
+                  elapsed={doc.progress.elapsed} />
+              ) : (
+                <ProgressCard title={doc.status === "queued" ? "Waiting for its turn" : "Starting"}
+                  detail={doc.status === "queued" ? "Another document is being processed first" : undefined} />
+              ))}
               {doc.status === "done" ? (
                 <PdfLinks doc={doc} layout="stack" />
               ) : (
@@ -399,6 +390,7 @@ export default function DocPage({ id }: { id: string }) {
               )}
             </section>
           )}
+          </div>
         </aside>
       </div>
 
@@ -412,10 +404,10 @@ export default function DocPage({ id }: { id: string }) {
           </span>
           {sorted.kind === "split" && <a className="btn small" href="#/">Library</a>}
           {sorted.kind === "split" && !sorted.removed && (
-            <button className="btn small" onClick={removeCopied}><Trash2 /> Remove from this scan</button>
+            <AsyncButton onClick={removeCopied} icon={<Trash2 />}>Remove from this scan</AsyncButton>
           )}
           {!(sorted.kind === "split" && sorted.removed) && (
-            <button className="btn small" onClick={undoSort}><Undo2 /> Undo</button>
+            <AsyncButton onClick={undoSort} icon={<Undo2 />}>Undo</AsyncButton>
           )}
           <button className="icon-btn" onClick={() => setSorted(null)} aria-label="Dismiss" title="Dismiss"><X /></button>
         </div>

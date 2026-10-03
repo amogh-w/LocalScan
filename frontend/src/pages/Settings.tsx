@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, ChevronLeft, CircleCheck, CircleX, Languages, RefreshCw, ScanText } from "lucide-react";
+import { Activity, ChevronLeft, CircleCheck, CircleX, Globe, Languages, RefreshCw, ScanText } from "lucide-react";
 import { api, type Health, type Settings } from "../api";
 import AppearancePicker from "../components/AppearancePicker";
 
@@ -55,6 +55,42 @@ export default function SettingsPage() {
         {error && <p className="error">{error}</p>}
         {s && (
           <>
+            <section className="card form">
+              <h2 className="with-icon">
+                <Globe /> Languages
+              </h2>
+              <div className="lang-pick">
+                <span className="lang-label">Scan languages (pick all that appear in your letters)</span>
+                <div className="lang-chips" role="group" aria-label="Scan languages">
+                  {s.languages.map((l) => {
+                    const on = s.scan_languages.includes(l.code);
+                    const only = on && s.scan_languages.length === 1;
+                    return (
+                      <button key={l.code} className={`pill${on ? " on" : ""}`} aria-pressed={on} disabled={only}
+                        title={only ? "At least one scan language is needed" : undefined}
+                        onClick={() => save({ scan_languages: on ? s.scan_languages.filter((c) => c !== l.code) : [...s.scan_languages, l.code] })}>
+                        {on && <CircleCheck />} {l.native === l.name ? l.name : `${l.name} (${l.native})`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <label>
+                Translate to
+                <select value={s.translate_to} onChange={(e) => save({ translate_to: e.target.value })}>
+                  {s.languages.map((l) => (
+                    <option key={l.code} value={l.code} disabled={s.scan_languages.length === 1 && s.scan_languages[0] === l.code}>
+                      {l.native === l.name ? l.name : `${l.name} (${l.native})`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="muted small">
+                Applies to everything: reading the letters, translating, and AI names. Translations you already have
+                stay saved for each language pair.
+              </p>
+            </section>
+
             <section className="card form">
               <h2 className="with-icon">
                 <Languages /> Translation (Ollama)

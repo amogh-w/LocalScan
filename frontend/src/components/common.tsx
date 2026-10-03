@@ -2,7 +2,31 @@ import {
   CircleAlert, CircleCheck, CircleDashed, Clock, Columns2, ExternalLink, FileText, Languages, LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { fileUrl, type Doc, type OutputKind } from "../api";
+
+/** A button for an action that takes time: it shows a spinner in place of its icon and ignores clicks until done. */
+export function AsyncButton({ onClick, icon, className = "btn small", disabled, title, ariaLabel, children }: {
+  onClick: () => unknown; icon?: ReactNode; className?: string; disabled?: boolean; title?: string; ariaLabel?: string;
+  children?: ReactNode;
+}) {
+  const [pending, setPending] = useState(false);
+  const click = async () => {
+    setPending(true);
+    try {
+      await onClick();
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <button className={className} onClick={click} disabled={disabled || pending} aria-busy={pending} title={title}
+      aria-label={ariaLabel}>
+      {pending ? <LoaderCircle className="spin" /> : icon}
+      {children}
+    </button>
+  );
+}
 
 const STATUS_ICONS = {
   draft: CircleDashed,

@@ -16,14 +16,24 @@ export const ACCENTS = [
 ] as const;
 export type Accent = (typeof ACCENTS)[number];
 
+/** Global text size: the share of the browser's font size that <html> uses. Everything is sized in rem. */
+export const TEXT_SIZES = [
+  { id: "small", label: "Small", percent: 87.5 },
+  { id: "default", label: "Default", percent: 93.75 },
+  { id: "large", label: "Large", percent: 100 },
+  { id: "xlarge", label: "Extra large", percent: 112.5 },
+] as const;
+export type TextSize = (typeof TEXT_SIZES)[number]["id"];
+
 export interface Theme {
   flavor: FlavorChoice;
   accent: Accent;
+  text: TextSize;
 }
 
 // Keep in sync with the inline script in index.html, which applies the theme before first paint.
 const KEY = "localscan.theme";
-export const DEFAULT_THEME: Theme = { flavor: "auto", accent: "blue" };
+export const DEFAULT_THEME: Theme = { flavor: "auto", accent: "blue", text: "default" };
 const darkQuery = matchMedia("(prefers-color-scheme: dark)");
 
 export function loadTheme(): Theme {
@@ -32,6 +42,7 @@ export function loadTheme(): Theme {
     return {
       flavor: t?.flavor === "auto" || FLAVORS.some((f) => f.id === t?.flavor) ? t.flavor : DEFAULT_THEME.flavor,
       accent: ACCENTS.includes(t?.accent) ? t.accent : DEFAULT_THEME.accent,
+      text: TEXT_SIZES.some((x) => x.id === t?.text) ? t.text : DEFAULT_THEME.text,
     };
   } catch {
     return DEFAULT_THEME;
@@ -54,6 +65,7 @@ export function applyTheme(t: Theme) {
   html.classList.remove(...FLAVORS.map((f) => f.id));
   html.classList.add(resolveFlavor(t.flavor));
   html.style.setProperty("--accent", `var(--ctp-${t.accent})`);
+  html.style.fontSize = `${TEXT_SIZES.find((x) => x.id === t.text)?.percent ?? 93.75}%`;
   // Browser chrome (mobile address bar) matches the app bar.
   const mantle = getComputedStyle(html).getPropertyValue("--ctp-mantle").trim();
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", mantle);

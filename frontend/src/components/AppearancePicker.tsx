@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
-import { Palette } from "lucide-react";
-import { ACCENTS, FLAVORS, useTheme, type Accent, type Flavor, type FlavorChoice } from "../theme";
+import { Palette, Type } from "lucide-react";
+import { ACCENTS, FLAVORS, TEXT_SIZES, useTheme, type Accent, type Flavor, type FlavorChoice } from "../theme";
 
 const css = (vars: Record<string, string>) => vars as CSSProperties;
 
@@ -31,6 +31,16 @@ export default function AppearancePicker() {
       <h2 className="with-icon">
         <Palette /> Appearance
       </h2>
+
+      <h3 id="text-label" className="with-icon"><Type /> Text size</h3>
+      <div className="seg text-sizes" role="radiogroup" aria-labelledby="text-label">
+        {TEXT_SIZES.map((x) => (
+          <button key={x.id} role="radio" aria-checked={theme.text === x.id} className={theme.text === x.id ? "on" : ""}
+            onClick={() => setTheme({ text: x.id })}>
+            {x.label}
+          </button>
+        ))}
+      </div>
 
       <h3 id="flavor-label">Flavor</h3>
       <div className="flavors" role="radiogroup" aria-labelledby="flavor-label">
@@ -69,7 +79,7 @@ export default function AppearancePicker() {
         ))}
       </div>
       <p className="accent-name">
-        <b>{theme.accent}</b> is used for buttons, the crop frame and progress. Saved on this device.
+        <b>{theme.accent}</b> is used for buttons, the crop frame and progress. Text size and colors are saved on this device.
       </p>
     </section>
   );

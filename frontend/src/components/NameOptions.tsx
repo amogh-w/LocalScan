@@ -2,6 +2,7 @@ import { LoaderCircle, Sparkles, Tag } from "lucide-react";
 import { api, type Doc } from "../api";
 import { AiSuggestion, useAiRename } from "./AiRename";
 import NameEditor from "./NameEditor";
+import ProgressCard from "./ProgressCard";
 
 interface Props {
   doc: Doc;
@@ -22,7 +23,7 @@ export default function NameOptions({ doc, onChange, onError }: Props) {
   };
 
   return (
-    <section className="opt-group">
+    <section className="opt-group wide">
       <h3 className="with-icon"><Tag /> Name</h3>
       <NameEditor value={doc.name} onSave={rename} className="title-input name-field" label="Document name" />
       <button className="btn small" onClick={ai.suggest} disabled={ai.thinking || doc.pages.length === 0}
@@ -30,7 +31,11 @@ export default function NameOptions({ doc, onChange, onError }: Props) {
         {ai.thinking ? <LoaderCircle className="spin" /> : <Sparkles />}
         {ai.thinking ? "Reading the letter…" : "Suggest name with AI"}
       </button>
-      {!ai.thinking && <AiSuggestion ai={ai} />}
+      {ai.thinking ? (
+        <ProgressCard title="Reading the letter" detail={`Looking at all ${doc.pages.length} page${doc.pages.length === 1 ? "" : "s"} to find the date, sender and subject`} />
+      ) : (
+        <AiSuggestion ai={ai} />
+      )}
     </section>
   );
 }

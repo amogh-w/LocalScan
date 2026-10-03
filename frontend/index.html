@@ -7,7 +7,7 @@
     <link rel="icon" href="/icon.svg" />
     <title>Local Scan</title>
     <script>
-      // Apply the saved Catppuccin flavor + accent before first paint (no flash). Mirrors src/theme.ts.
+      // Apply the saved Catppuccin flavor, accent and text size before first paint (no flash). Mirrors src/theme.ts.
       (function () {
         var t = {};
         try { t = JSON.parse(localStorage.getItem("localscan.theme")) || {}; } catch (e) {}
@@ -15,6 +15,8 @@
           : (matchMedia("(prefers-color-scheme: dark)").matches ? "mocha" : "latte");
         var h = document.documentElement;
         h.classList.add(f);
+        var sizes = { small: 87.5, "default": 93.75, large: 100, xlarge: 112.5 };
+        h.style.fontSize = (sizes[t.text] || 93.75) + "%";
         h.style.setProperty("--accent", "var(--ctp-" + (/^[a-z]+$/.test(t.accent || "") ? t.accent : "blue") + ")");
       })();
     </script>
