@@ -25,8 +25,8 @@ export default function NameOptions({ doc, onChange, onError }: Props) {
   return (
     <section className="opt-group wide">
       <h3 className="with-icon"><Tag /> Name</h3>
-      <NameEditor value={doc.name} onSave={rename} className="title-input name-field" label="Document name" />
-      <button className="btn small" onClick={ai.suggest} disabled={ai.thinking || doc.pages.length === 0}
+      <NameEditor value={doc.name} onSave={rename} className="field" label="Document name" />
+      <button className="btn btn-sm btn-tinted" onClick={ai.suggest} disabled={ai.thinking || doc.pages.length === 0}
         title={doc.pages.length ? "Read the letter and suggest a name" : "Add a page first"}>
         {ai.thinking ? <LoaderCircle className="spin" /> : <Sparkles />}
         {ai.thinking ? "Reading the letter…" : "Suggest name with AI"}

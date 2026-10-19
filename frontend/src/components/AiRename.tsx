@@ -37,7 +37,7 @@ type AiRename = ReturnType<typeof useAiRename>;
 export function AiRenameButton({ ai, doc }: { ai: AiRename; doc: Doc }) {
   const ready = doc.pages.length > 0;
   return (
-    <button className="icon-btn ai-btn" onClick={ai.suggest} disabled={ai.thinking || !ready}
+    <button className="btn btn-icon btn-sm btn-gray text-accent" onClick={ai.suggest} disabled={ai.thinking || !ready}
       aria-label="Suggest a name with AI" title={ready ? "Suggest a name with AI" : "Add a page first"}>
       {ai.thinking ? <LoaderCircle className="spin" /> : <Sparkles />}
     </button>
@@ -51,10 +51,10 @@ export function AiSuggestion({ ai }: { ai: AiRename }) {
     <div className="suggestion" role="status">
       <Sparkles className="sparkle" />
       <span className="suggestion-name">{ai.suggestion.name}</span>
-      <button className="btn small primary" onClick={ai.accept}>
+      <button className="btn btn-sm btn-filled" onClick={ai.accept}>
         <Check /> Use
       </button>
-      <button className="icon-btn" onClick={ai.dismiss} aria-label="Dismiss" title="Dismiss">
+      <button className="btn btn-icon btn-sm btn-plain" onClick={ai.dismiss} aria-label="Dismiss" title="Dismiss">
         <X />
       </button>
     </div>

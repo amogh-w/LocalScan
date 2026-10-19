@@ -1,13 +1,14 @@
 import QRCode from "qrcode";
 import {
   Camera, FileText, Files, Folder, FolderInput, Inbox, Languages, Menu, Pencil, Plus, RotateCcw, Settings, Smartphone, Sparkles, Square,
-  SquareCheck, Tag as TagIcon, Trash2, X,
+  SquareCheck, Tag as TagIcon, Trash2, X, CircleX,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, flattenFolders, previewUrl, type Doc, type Folder as FolderT, type LibraryView, type Tag } from "../api";
 import { AiRenameButton, AiSuggestion, useAiRename } from "../components/AiRename";
 import NameEditor from "../components/NameEditor";
 import Sidebar, { DOC_DRAG_TYPE } from "../components/Sidebar";
+import { ask } from "../components/kit";
 import TagChip from "../components/TagChip";
 import { AsyncButton, PdfLinks, StatusBadge } from "../components/common";
 
@@ -59,10 +60,9 @@ export default function Library({ view }: { view: LibraryView }) {
 
   useEffect(() => {
     if (isPhone) return;
-    api.serverInfo().then(async ({ lan_url }) => {
-      // Same port as this page, so in dev the phone gets the Vite server with hot reload.
-      const url = new URL(lan_url);
-      url.port = location.port;
+    api.serverInfo().then(async ({ lan_url, dev_url }) => {
+      // While the Vite dev server runs the phone gets it (hot reload), whichever port this page was opened on.
+      const url = new URL(dev_url ?? lan_url);
       const svg = await QRCode.toString(url.origin, { type: "svg", margin: 1 });
       setQr({ url: url.origin, svg });
     });
@@ -105,12 +105,12 @@ export default function Library({ view }: { view: LibraryView }) {
 
   return (
     <div className="screen lib-screen">
-      <header className="bar">
-        <button className="icon-btn menu-btn" onClick={() => setDrawer(!drawer)} aria-label="Folders and tags" title="Folders and tags">
+      <header className="app-bar">
+        <button className="btn btn-icon btn-plain menu-btn" onClick={() => setDrawer(!drawer)} aria-label="Folders and tags" title="Folders and tags">
           <Menu />
         </button>
         <h1>Local Scan</h1>
-        <a className="icon-btn" href="#/settings" aria-label="Settings" title="Settings">
+        <a className="btn btn-icon btn-plain" href="#/settings" aria-label="Settings" title="Settings">
           <Settings />
         </a>
       </header>
@@ -126,7 +126,7 @@ export default function Library({ view }: { view: LibraryView }) {
               <summary className="with-icon">
                 <Smartphone /> Scan from your phone
               </summary>
-              <div className="qr" dangerouslySetInnerHTML={{ __html: qr.svg }} />
+              <div className="qr latte" dangerouslySetInnerHTML={{ __html: qr.svg }} />
               <p className="muted small">
                 Same Wi-Fi, open <code>{qr.url}</code>
               </p>
@@ -140,19 +140,21 @@ export default function Library({ view }: { view: LibraryView }) {
               {title.icon} {title.text} <span className="muted small">{shown.length}</span>
             </h2>
             {view.kind === "trash" ? (
-              <AsyncButton className="btn danger" disabled={!trashed.length} icon={<Trash2 />}
-                onClick={() => window.confirm(`Delete ${trashed.length} document${trashed.length === 1 ? "" : "s"} for good? This cannot be undone.`)
-                  && act(() => api.emptyTrash())}>
+              <AsyncButton className="btn btn-danger-tinted" disabled={!trashed.length} icon={<Trash2 />}
+                onClick={async () => await ask({
+                  title: `Delete ${trashed.length} document${trashed.length === 1 ? "" : "s"} for good?`,
+                  text: "This cannot be undone.", ok: "Empty trash", icon: "trash-2", danger: true,
+                }) && act(() => api.emptyTrash())}>
                 Empty trash
               </AsyncButton>
             ) : (
-              <AsyncButton className="btn primary" onClick={newScan} icon={<Plus />}>
+              <AsyncButton className="btn btn-filled" onClick={newScan} icon={<Plus />}>
                 New scan
               </AsyncButton>
             )}
           </div>
 
-          {error && <p className="error">{error}</p>}
+          {error && <div className="alert tone-danger" role="alert"><CircleX className="size-5 shrink-0" />{error}</div>}
           {view.kind === "trash" && shown.length > 0 && (
             <p className="muted small">Documents in the trash are deleted for good after 30 days.</p>
           )}
@@ -173,8 +175,10 @@ export default function Library({ view }: { view: LibraryView }) {
             {shown.map((d) => view.kind === "trash" ? (
               <TrashCard key={d.id} doc={d}
                 onRestore={() => act(() => api.bulk([d.id], "restore"))}
-                onPurge={() => window.confirm(`Delete "${d.name}" for good? This cannot be undone.`)
-                  && act(() => api.bulk([d.id], "purge"))} />
+                onPurge={async () => await ask({
+                  title: `Delete "${d.name}" for good?`, text: "This cannot be undone.", ok: "Delete forever",
+                  icon: "trash-2", danger: true,
+                }) && act(() => api.bulk([d.id], "purge"))} />
             ) : (
               <DocCard key={d.id} doc={d} folderName={view.kind !== "folder" && d.folder_id ? folderName.get(d.folder_id) : undefined}
                 selected={selected.has(d.id)} selecting={selected.size > 0} onToggle={() => toggle(d.id)}
@@ -191,11 +195,13 @@ export default function Library({ view }: { view: LibraryView }) {
           onSelectAll={() => setSelected(new Set(shown.map((d) => d.id)))}
           onMove={(folderId) => act(() => api.bulk(ids, "move", { folder_id: folderId }))}
           onTag={(tagId) => act(() => api.bulk(ids, "tag", { tag_id: tagId }))}
-          onDelete={() => window.confirm(`Move ${ids.length} document${ids.length === 1 ? "" : "s"} to the trash?`)
-            && act(async () => {
-              await api.bulk(ids, "delete");
-              setSelected(new Set());
-            })} />
+          onDelete={async () => await ask({
+            title: `Move ${ids.length} document${ids.length === 1 ? "" : "s"} to the trash?`,
+            text: "You can restore them from the trash for 30 days.", ok: "Move to trash", icon: "trash-2", danger: true,
+          }) && act(async () => {
+            await api.bulk(ids, "delete");
+            setSelected(new Set());
+          })} />
       )}
     </div>
   );
@@ -208,8 +214,8 @@ function BulkBar(p: {
   return (
     <div className="bulk-bar" role="toolbar" aria-label="Selected documents">
       <span className="bulk-count">{p.count} selected</span>
-      <button className="btn small" onClick={p.onSelectAll}>Select all</button>
-      <label className="btn small select-btn">
+      <button className="btn btn-gray btn-sm" onClick={p.onSelectAll}>Select all</button>
+      <label className="btn btn-gray btn-sm select-btn">
         <FolderInput /> Move to
         <select value="" onChange={(e) => e.target.value && p.onMove(e.target.value === "__none" ? null : e.target.value)}>
           <option value="" disabled>Move to…</option>
@@ -219,7 +225,7 @@ function BulkBar(p: {
           ))}
         </select>
       </label>
-      <label className="btn small select-btn">
+      <label className="btn btn-gray btn-sm select-btn">
         <TagIcon /> Add tag
         <select value="" onChange={(e) => e.target.value && p.onTag(e.target.value)} disabled={!p.tags.length}>
           <option value="" disabled>{p.tags.length ? "Add tag…" : "No tags yet"}</option>
@@ -228,10 +234,10 @@ function BulkBar(p: {
           ))}
         </select>
       </label>
-      <AsyncButton className="btn small danger" onClick={p.onDelete} icon={<Trash2 />}>
+      <AsyncButton className="btn btn-danger-tinted btn-sm" onClick={p.onDelete} icon={<Trash2 />}>
         Move to trash
       </AsyncButton>
-      <button className="icon-btn" onClick={p.onClear} aria-label="Clear selection" title="Clear selection">
+      <button className="btn btn-icon btn-sm btn-plain" onClick={p.onClear} aria-label="Clear selection" title="Clear selection">
         <X />
       </button>
     </div>
@@ -254,8 +260,8 @@ function TrashCard({ doc: d, onRestore, onPurge }: { doc: Doc; onRestore: () => 
         </div>
       </div>
       <div className="tile-foot actions">
-        <AsyncButton onClick={onRestore} icon={<RotateCcw />}>Restore</AsyncButton>
-        <AsyncButton className="btn small danger" onClick={onPurge} icon={<Trash2 />}>Delete forever</AsyncButton>
+        <AsyncButton className="btn btn-gray btn-sm" onClick={onRestore} icon={<RotateCcw />}>Restore</AsyncButton>
+        <AsyncButton className="btn btn-danger-tinted btn-sm" onClick={onPurge} icon={<Trash2 />}>Delete forever</AsyncButton>
       </div>
     </li>
   );
@@ -309,14 +315,14 @@ function DocCard({ doc: d, folderName, selected, selecting, onToggle, dragIds, o
             </div>
           )}
         </a>
-        <button className="select-box" onClick={onToggle} aria-pressed={selected}
+        <button className="btn btn-icon btn-sm btn-gray select-box" onClick={onToggle} aria-pressed={selected}
           aria-label={selected ? `Deselect ${d.name}` : `Select ${d.name}`} title={selected ? "Deselect" : "Select"}>
           {selected ? <SquareCheck /> : <Square />}
         </button>
         {!renaming && (
           <div className="tile-actions">
             <AiRenameButton ai={ai} doc={d} />
-            <button className="icon-btn" onClick={() => setRenaming(true)} aria-label={`Rename ${d.name}`} title="Rename">
+            <button className="btn btn-icon btn-sm btn-gray" onClick={() => setRenaming(true)} aria-label={`Rename ${d.name}`} title="Rename">
               <Pencil />
             </button>
           </div>
@@ -345,7 +351,7 @@ function DocCard({ doc: d, folderName, selected, selecting, onToggle, dragIds, o
         {(folderName || d.tags.length > 0) && (
           <div className="tile-tags">
             {folderName && (
-              <span className="folder-chip">
+              <span className="badge badge-outline">
                 <Folder /> {folderName}
               </span>
             )}
@@ -365,7 +371,7 @@ function DocCard({ doc: d, folderName, selected, selecting, onToggle, dragIds, o
       ) : (
         next && (
           <div className="tile-foot">
-            <a className="btn small tile-cta" href={href}>
+            <a className="btn btn-sm btn-tinted tile-cta" href={href}>
               {next.icon} {next.label}
             </a>
           </div>

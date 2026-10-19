@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FolderTree, Plus } from "lucide-react";
 import { api, flattenFolders, type Doc, type Folder, type Tag } from "../api";
+import { Select } from "./kit";
 import TagChip from "./TagChip";
 
 interface Props {
@@ -52,16 +53,16 @@ export default function Organize({ doc, onChange, onError }: Props) {
   return (
     <section className="opt-group organize wide">
       <h3 className="with-icon"><FolderTree /> Organize</h3>
-      <label className="field">
+      <label className="labelled-block">
         <span className="field-label">Folder</span>
-        <select value={doc.folder_id ?? ""} onChange={(e) => run(() => api.moveDoc(doc.id, e.target.value || null))}>
+        <Select value={doc.folder_id ?? ""} onChange={(e) => run(() => api.moveDoc(doc.id, e.target.value || null))}>
           <option value="">Unfiled</option>
           {flattenFolders(folders).map((f) => (
             <option key={f.id} value={f.id}>{"  ".repeat(f.depth) + f.name}</option>
           ))}
-        </select>
+        </Select>
       </label>
-      <div className="field">
+      <div className="labelled-block">
         <span className="field-label">Tags</span>
         {doc.tags.length > 0 && (
           <div className="tag-list">
@@ -72,14 +73,14 @@ export default function Organize({ doc, onChange, onError }: Props) {
           </div>
         )}
         <form className="tag-add" onSubmit={(e) => (e.preventDefault(), addTag(draft))}>
-          <input list={`tags-${doc.id}`} value={draft} onChange={(e) => setDraft(e.target.value)}
+          <input className="field" list={`tags-${doc.id}`} value={draft} onChange={(e) => setDraft(e.target.value)}
             placeholder={available.length ? "Add a tag…" : "New tag…"} aria-label="Add a tag" maxLength={80} />
           <datalist id={`tags-${doc.id}`}>
             {available.map((t) => (
               <option key={t.id} value={t.name} />
             ))}
           </datalist>
-          <button className="btn small" type="submit" disabled={!draft.trim()} aria-label="Add tag" title="Add tag">
+          <button className="btn btn-gray btn-icon" type="submit" disabled={!draft.trim()} aria-label="Add tag" title="Add tag">
             <Plus />
           </button>
         </form>

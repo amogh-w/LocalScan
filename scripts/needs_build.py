@@ -7,7 +7,7 @@ dist = frontend / "dist" / "index.html"
 if not dist.exists():
     sys.exit(0)
 newest = max(
-    (f.stat().st_mtime for root in (frontend / "src", frontend / "public", frontend / "index.html")
+    (f.stat().st_mtime for root in (frontend / "src", frontend / "ui", frontend / "public", frontend / "index.html")
      for f in ([root] if root.is_file() else root.rglob("*") if root.exists() else []) if f.is_file()),
     default=0,
 )

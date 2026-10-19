@@ -37,10 +37,24 @@ def upload_config():
     return {"max_edge": imaging.max_edge(), "resize_quality": imaging.resize_quality()}
 
 
+DEV_PORT = 5173  # the Vite dev server (hot reload), when it is running
+
+
+def _listening(port: int) -> bool:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout(0.3)
+    try:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+    finally:
+        s.close()
+
+
 @router.get("/server-info")
 def server_info():
+    """Where the phone should go: lan_url is the app itself; dev_url is the Vite dev server, only while it runs."""
     port = settings.section("server").get("port", 8000)
-    return {"lan_url": f"http://{lan_ip()}:{port}"}
+    ip = lan_ip()
+    return {"lan_url": f"http://{ip}:{port}", "dev_url": f"http://{ip}:{DEV_PORT}" if _listening(DEV_PORT) else None}
 
 
 class SettingsPatch(BaseModel):

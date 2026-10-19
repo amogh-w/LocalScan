@@ -112,6 +112,13 @@ export interface Health {
   translator: { ok: boolean; detail: string };
 }
 
+export interface ServiceInfo {
+  id: string;
+  name: string;
+  state: "running" | "starting" | "stopped";
+  detail: string;
+}
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method };
   if (body instanceof FormData) init.body = body;
@@ -197,7 +204,11 @@ export const api = {
   putSettings: (patch: Partial<Pick<Settings, "ollama_model" | "ollama_url" | "paddle_url">> & { ocr_engine?: string; scan_languages?: string[]; translate_to?: string; images?: Record<string, number>; export?: Record<string, number | string> }) =>
     req<Settings>("PUT", "/api/settings", patch),
   health: () => req<Health>("GET", "/api/health"),
-  serverInfo: () => req<{ lan_url: string }>("GET", "/api/server-info"),
+  services: () => req<ServiceInfo[]>("GET", "/api/services"),
+  startService: (id: string) => req<ServiceInfo>("POST", `/api/services/${id}/start`),
+  stopService: (id: string) => req<ServiceInfo>("POST", `/api/services/${id}/stop`),
+  serviceLogs: (id: string) => req<{ text: string }>("GET", `/api/services/${id}/logs?lines=200`),
+  serverInfo: () => req<{ lan_url: string; dev_url: string | null }>("GET", "/api/server-info"),
 };
 
 export const imageUrl = (id: string, pid: string, max = 1600) => `${d(id)}/pages/${pid}/image?max=${max}`;

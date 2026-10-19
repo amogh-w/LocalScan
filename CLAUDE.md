@@ -23,7 +23,8 @@ Prose, comments and commit messages use the plain hyphen. Never write em or en d
 ## Commands
 
 ```powershell
-.\run.bat                         # (double-clickable) build frontend if stale, serve everything on :8010 (prints LAN URL + QR)
+.\run.bat                         # (double-clickable) server hidden + system-tray icon (scripts/tray.py), on :8010
+.\run.bat -Console                # server in this window: builds frontend if stale, prints LAN URL + QR
 .\run.bat -Dev                    # backend --reload on :8010 + Vite HMR on :5173 (phone: http://<lan-ip>:5173)
 uv sync --extra paddle            # install deps incl. in-process PaddleOCR GPU
 uv run pytest                     # backend tests
@@ -144,6 +145,24 @@ automatically. Gaps: other prompts (sorting) and the PDF fonts assume Latin text
 needs a font in `render/` and a PaddleOCR model that is installed. The pair must differ (the API rejects
 equal ones).
 
+### Helper services (`services.py`, `api/services.py`, Settings > Services)
+
+Ollama and PaddleOCR are started, stopped, health-checked and log-read from Settings. **Nothing starts by itself**; the
+user clicks Start. `ProcessService` launches a program hidden (Ollama: `ollama serve`; engine `paddle_http`: the separate
+server from `[services.paddle_server]` in `config.toml`), logs to `data/logs/<id>.log`, reports state by port
+(`running` / `starting` / `stopped`) and stops it by killing the process tree on that port, but only when it is ours or
+its name matches (`owners`); it never kills a stranger on the port. With `paddle_local` the "service" is the loaded
+models (`paddle_local.preload` / `unload`; Stop frees GPU memory). Services whose URL is not on this PC cannot be started.
+`GET /api/services`, `POST /api/services/<id>/start|stop`, `GET /api/services/<id>/logs`. The page polls state every
+2 s; the health check is `/api/health`. Tests: `tests/test_services.py`.
+
+### Tray (`scripts/tray.py`)
+
+`run.bat` starts the server hidden (log in `data/logs/server.log`) and a pystray icon: open, copy phone link,
+start with Windows (HKCU Run key), open log folder, restart, exit (which ends the whole server process tree). One tray
+at a time (a named mutex); a second start just opens the app. The tooltip shows running, starting or stopped. It
+mirrors the cuppa shell (`shared/shell.rs`).
+
 ## Frontend
 
 React + Vite + TypeScript (`frontend/src`) with hash routing: `#/`, `#/unfiled`, `#/folder/<id>`,
@@ -169,14 +188,25 @@ for the Library and the document screen).
   labels never name a language. The stored kinds are `scan`, `translated` and `side_by_side`; the file
   names a viewer proposes come from `jobs.OUTPUTS`.
 
-**Theming is Catppuccin only.** `src/catppuccin.css` is the official palette (v1.8.0) as `--ctp-*`
-variables, one class per flavor. `styles.css` maps the app's tokens onto Catppuccin roles: `--bg` base,
-`--card` mantle, `--raised` surface0/1, `--text`/`--label`/`--muted` text/subtext1/subtext0, `--danger`
-red, `--ok` green, `--warn` yellow, and `--accent` the user's chosen accent. Use those tokens or
-`var(--ctp-*)`; never write raw hex or rgba in styles. The one exception is the QR code background, kept
-at Latte base so it stays scannable. `src/theme.ts` applies the flavor class, `--accent` and the text size (`font-size` on `<html>`; sizes are in rem so everything scales) to `<html>`
-and stores the choice per device in localStorage. The inline script in `index.html` applies it before
-first paint, so keep the two in sync. The picker is `components/AppearancePicker.tsx`, shown in Settings.
+**Look and theming: the cuppa-ui kit** (Tailwind v4 + Catppuccin, `frontend/ui/`, skill `cuppa:cuppa-ui`; follow its
+rules and its `references/checklist.md`). `ui/kit.css` + `ui/palette.css` are copies of the kit; do not edit them,
+put Local Scan specifics in `src/app.css` (imported by `main.tsx`, built by the `@tailwindcss/vite` plugin, so there is
+no separate CSS build). Use kit classes (`btn btn-filled|tinted|gray|plain|danger-tinted`, `btn-sm`, `btn-icon`, `card`,
+`field`, `chip`, `badge badge-tint`, `alert tone-*`, `seg`, `menu`, `modal`, `tabbar`/`tab`, `side-item`) and kit tokens
+(`bg-base`, `var(--ctp-*)`, `--accent`, `--r-ctl|card|sheet`); never raw hex. Layers: page mantle, card base, control
+surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabbar`).
+- `public/theme.js` (copy of `ui/theme.js`) sets flavor, accent and radius before first paint from the kit's
+  localStorage keys `ui-flavor`, `ui-accent`, `ui-radius`; `src/theme.ts` and `AppearancePicker.tsx` write those keys and
+  call the kit's `applyTheme()`. Never add a second switcher. Text size is ours (`localscan_text`, a multiplier `--ts` on
+  `<html>`; `app.css` scales the kit's px type scale with it). An old `localscan.theme` value is migrated once.
+- `public/ui.js` (copy of `ui/ui.js`) gives `UI.confirm` / `UI.toast`; `components/kit.tsx` wraps them (`ask()`) and holds
+  the React versions of what ui.js does only for static markup (`Seg`, `Select`, `Dialog`). Confirm every disruptive or
+  hard-to-undo action with `ask()`, never `window.confirm`. When the kit is updated, re-run `init.mjs --force` and copy
+  `ui/theme.js` and `ui/ui.js` to `public/`.
+- Icons: `lucide-react` in the screens; `public/icons.svg` (built by `npm run icons` from `ui/icons.txt`) only feeds
+  `UI.confirm` / `UI.toast`, so add a name there when a confirm uses a new icon.
+- Motion is only transform and opacity, with the kit's three durations and `var(--ease)`.
+- The QR code box carries the `latte` class so it stays scannable in every flavor.
 
 ## Data and caching
 

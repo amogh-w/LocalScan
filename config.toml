@@ -42,3 +42,11 @@ page_quality = 92     # JPEG quality of the cleaned page that is stored
 preset = "standard"   # archive | standard | small | custom (custom uses dpi and quality below)
 dpi = 300
 quality = 88
+
+# Helper programs the Settings page can start and stop (nothing starts by itself).
+[services.ollama]
+command = "ollama"   # found on PATH, or in %LOCALAPPDATA%\Programs\Ollama
+
+[services.paddle_server]   # your separate PaddleOCR server, used only when ocr.engine = "paddle_http"
+python = "~/miniconda3/envs/paddleocr/python.exe"
+cwd = "~/Projects/Paddle"

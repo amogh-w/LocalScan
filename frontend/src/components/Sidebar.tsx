@@ -3,6 +3,7 @@ import {
   ChevronDown, ChevronRight, Files, Folder, FolderOpen, FolderPlus, Inbox, Palette, Pencil, Plus, Trash2,
 } from "lucide-react";
 import { api, type Folder as FolderT, type LibraryView, type Tag } from "../api";
+import { ask } from "./kit";
 import NameEditor from "./NameEditor";
 
 export const DOC_DRAG_TYPE = "application/x-localscan-docs";
@@ -70,7 +71,7 @@ export default function Sidebar(p: Props) {
       <div className="side-group">
         <div className="side-head">
           <span>Folders</span>
-          <button className="icon-btn" title="New folder" aria-label="New folder"
+          <button className="btn btn-icon btn-plain" title="New folder" aria-label="New folder"
             onClick={() => setCreating({ kind: "folder", parent: null })}>
             <FolderPlus />
           </button>
@@ -86,7 +87,7 @@ export default function Sidebar(p: Props) {
       <div className="side-group">
         <div className="side-head">
           <span>Tags</span>
-          <button className="icon-btn" title="New tag" aria-label="New tag" onClick={() => setCreating({ kind: "tag" })}>
+          <button className="btn btn-icon btn-plain" title="New tag" aria-label="New tag" onClick={() => setCreating({ kind: "tag" })}>
             <Plus />
           </button>
         </div>
@@ -106,7 +107,7 @@ function SideLink({ view, current, icon, label, count }: {
   view: LibraryView; current: LibraryView; icon: React.ReactNode; label: string; count?: number;
 }) {
   return (
-    <a className={`side-item${same(view, current) ? " on" : ""}`} href={href(view)}>
+    <a className="side-item" href={href(view)} aria-selected={same(view, current)} aria-current={same(view, current) ? "page" : undefined}>
       {icon}
       <span className="side-label">{label}</span>
       {count !== undefined && <span className="side-count">{count}</span>}
@@ -161,7 +162,7 @@ function FolderRow(props: Parameters<typeof FolderTree>[0] & { folder: FolderT }
 
   return (
     <>
-      <div className={`side-item folder-row${active ? " on" : ""}${drop.over ? " drop-over" : ""}`}
+      <div className={`side-item folder-row${drop.over ? " drop-over" : ""}`} aria-selected={active}
         style={{ paddingLeft: 6 + depth * 14 }} {...drop.props}>
         <button className="twisty" onClick={() => setOpen(!open)} aria-label={open ? "Collapse" : "Expand"}
           style={{ visibility: kids.length ? "visible" : "hidden" }}>
@@ -179,19 +180,21 @@ function FolderRow(props: Parameters<typeof FolderTree>[0] & { folder: FolderT }
         )}
         {!renaming && (
           <span className="row-actions">
-            <button className="icon-btn" title="New subfolder" aria-label="New subfolder"
+            <button className="btn btn-icon btn-plain" title="New subfolder" aria-label="New subfolder"
               onClick={() => (setOpen(true), props.setCreating({ kind: "folder", parent: f.id }))}>
               <FolderPlus />
             </button>
-            <button className="icon-btn" title="Rename" aria-label="Rename folder" onClick={() => setRenaming(true)}>
+            <button className="btn btn-icon btn-plain" title="Rename" aria-label="Rename folder" onClick={() => setRenaming(true)}>
               <Pencil />
             </button>
-            <button className="icon-btn" title="Delete folder" aria-label="Delete folder"
-              onClick={() => window.confirm(`Delete folder "${f.name}"? Its documents and subfolders move up a level.`)
-                && run(async () => {
-                  await api.deleteFolder(f.id);
-                  if (active) location.hash = "#/";
-                })}>
+            <button className="btn btn-icon btn-plain" title="Delete folder" aria-label="Delete folder"
+              onClick={async () => await ask({
+                title: `Delete folder "${f.name}"?`, text: "Its documents and subfolders move up a level.", ok: "Delete",
+                icon: "trash-2", danger: true,
+              }) && run(async () => {
+                await api.deleteFolder(f.id);
+                if (active) location.hash = "#/";
+              })}>
               <Trash2 />
             </button>
           </span>
@@ -214,7 +217,7 @@ function TagRow({ tag, current, colors, run }: {
   const active = current.kind === "tag" && current.id === tag.id;
   return (
     <>
-      <div className={`side-item tag-row${active ? " on" : ""}`}>
+      <div className="side-item tag-row" aria-selected={active}>
         {renaming ? (
           <NameEditor value={tag.name} autoFocus className="title-input side-input" label="Tag name"
             onSave={(name) => run(() => api.updateTag(tag.id, { name }))} onDone={() => setRenaming(false)} />
@@ -227,18 +230,20 @@ function TagRow({ tag, current, colors, run }: {
         )}
         {!renaming && (
           <span className="row-actions">
-            <button className="icon-btn" title="Colour" aria-label="Change colour" onClick={() => setPicking(!picking)}>
+            <button className="btn btn-icon btn-plain" title="Colour" aria-label="Change colour" onClick={() => setPicking(!picking)}>
               <Palette />
             </button>
-            <button className="icon-btn" title="Rename" aria-label="Rename tag" onClick={() => setRenaming(true)}>
+            <button className="btn btn-icon btn-plain" title="Rename" aria-label="Rename tag" onClick={() => setRenaming(true)}>
               <Pencil />
             </button>
-            <button className="icon-btn" title="Delete tag" aria-label="Delete tag"
-              onClick={() => window.confirm(`Delete tag "${tag.name}"? Documents keep everything else.`)
-                && run(async () => {
-                  await api.deleteTag(tag.id);
-                  if (active) location.hash = "#/";
-                })}>
+            <button className="btn btn-icon btn-plain" title="Delete tag" aria-label="Delete tag"
+              onClick={async () => await ask({
+                title: `Delete tag "${tag.name}"?`, text: "Documents keep everything else.", ok: "Delete",
+                icon: "trash-2", danger: true,
+              }) && run(async () => {
+                await api.deleteTag(tag.id);
+                if (active) location.hash = "#/";
+              })}>
               <Trash2 />
             </button>
           </span>
@@ -248,7 +253,7 @@ function TagRow({ tag, current, colors, run }: {
         <div className="tag-colors" role="radiogroup" aria-label={`Colour of ${tag.name}`}>
           {colors.map((c) => (
             <button key={c} role="radio" aria-checked={c === tag.color} aria-label={c} title={c}
-              className={`swatch small${c === tag.color ? " on" : ""}`}
+              className="swatch small"
               style={{ "--sw": `var(--ctp-${c})` } as CSSProperties}
               onClick={() => run(() => api.updateTag(tag.id, { color: c })).then(() => setPicking(false))} />
           ))}

@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from . import jobs, storage
 from .api import documents
 from .api import library as library_api
+from .api import services as services_api
 from .api import settings as settings_api
 from .config import ROOT, settings
 
@@ -27,6 +28,7 @@ app = FastAPI(title="Local Scan", lifespan=lifespan)
 app.include_router(documents.router)
 app.include_router(library_api.router)
 app.include_router(settings_api.router)
+app.include_router(services_api.router)
 
 if DIST.exists():
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")

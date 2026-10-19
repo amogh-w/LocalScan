@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Inbox, ListOrdered, LoaderCircle, Sparkles, TriangleAlert, X } from "lucide-react";
+import { Dialog, Select, tone } from "./kit";
 import ProgressCard from "./ProgressCard";
 import { api, previewUrl, type Confidence, type Doc, type SortProposal } from "../api";
 
@@ -19,6 +20,7 @@ interface Row {
 }
 
 const LABEL: Record<Confidence, string> = { high: "High", medium: "Medium", low: "Low" };
+const TONES: Record<Confidence, string> = { high: "green", medium: "yellow", low: "red" };
 const TRAY = -1;
 
 function rowsFrom(p: SortProposal): { rows: Row[]; tray: Item[] } {
@@ -121,11 +123,10 @@ export default function SortPages({ doc, split, onClose, onApplied }: {
   const loading = !proposal && !error;
 
   return (
-    <div className="sheet-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+    <Dialog label={title} onClose={onClose} className="review">
         <header className="sheet-head">
           <h2 className="with-icon">{split ? <Sparkles /> : <ListOrdered />} {title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close" title="Close"><X /></button>
+          <button className="btn btn-icon btn-sm btn-gray" onClick={onClose} aria-label="Close" title="Close"><X /></button>
         </header>
 
         <div className="sheet-body">
@@ -134,7 +135,7 @@ export default function SortPages({ doc, split, onClose, onApplied }: {
               detail={step.total ? `${step.done ?? 0} of ${step.total}` : `${doc.pages.length} pages`}
               percent={step.total ? Math.round(100 * (step.done ?? 0) / step.total) : undefined} />
           )}
-          {error && <p className="error" role="alert"><TriangleAlert /> {error}</p>}
+          {error && <div className="alert tone-danger" role="alert"><TriangleAlert className="size-5 shrink-0" />{error}</div>}
           {proposal?.message && <p className="sort-note"><TriangleAlert /> {proposal.message}</p>}
 
           {proposal && (
@@ -151,12 +152,12 @@ export default function SortPages({ doc, split, onClose, onApplied }: {
               onDrop={(e) => { const id = e.dataTransfer.getData("text/x-page"); if (id) moveItem(id, row.key); }}>
               <div className="sort-row-head">
                 {split ? (
-                  <input className="title-input name-field" value={row.name} placeholder={`Document ${n + 1}`}
+                  <input className="field" value={row.name} placeholder={`Document ${n + 1}`}
                     aria-label={`Name of document ${n + 1}`}
                     onChange={(e) => setRows(rows.map((r) => r.key === row.key ? { ...r, name: e.target.value, edited: true } : r))} />
                 ) : <strong>Reading order</strong>}
                 <span className="muted sort-count">{row.items.length} page{row.items.length === 1 ? "" : "s"}</span>
-                <span className={`chip conf ${row.confidence}`} title={row.reason}>{LABEL[row.confidence]}</span>
+                <span className="badge badge-tint" style={tone(TONES[row.confidence])} title={row.reason}>{LABEL[row.confidence]}</span>
               </div>
               {row.reason && <p className="muted sort-reason">{row.reason}</p>}
               <div className="sort-strip">
@@ -193,14 +194,13 @@ export default function SortPages({ doc, split, onClose, onApplied }: {
         </div>
 
         <footer className="sheet-foot">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={applying || loading || kept.length === 0 || !changed} onClick={apply}>
+          <button className="btn btn-gray" onClick={onClose}>Cancel</button>
+          <button className="btn btn-filled" disabled={applying || loading || kept.length === 0 || !changed} onClick={apply}>
             {applying ? <LoaderCircle className="spin" /> : <Check />}
             {split ? `Create ${kept.length} document${kept.length === 1 ? "" : "s"}` : "Apply order"}
           </button>
         </footer>
-      </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -227,13 +227,13 @@ function Thumb({ doc, item, index, expected, pageById, targets, onEarlier, onLat
       </figcaption>
       {item.why && <span className="muted sort-why">{item.why}</span>}
       <div className="sort-thumb-tools">
-        <button className="icon-btn" disabled={!onEarlier} onClick={onEarlier} aria-label="Move earlier" title="Move earlier"><ArrowLeft /></button>
-        <button className="icon-btn" disabled={!onLater} onClick={onLater} aria-label="Move later" title="Move later"><ArrowRight /></button>
+        <button className="btn btn-icon btn-sm btn-gray" disabled={!onEarlier} onClick={onEarlier} aria-label="Move earlier" title="Move earlier"><ArrowLeft /></button>
+        <button className="btn btn-icon btn-sm btn-gray" disabled={!onLater} onClick={onLater} aria-label="Move later" title="Move later"><ArrowRight /></button>
         {targets.length > 0 && (
-          <select aria-label="Move to document" value="" onChange={(e) => e.target.value && onMove(Number(e.target.value))}>
+          <Select aria-label="Move to document" value="" onChange={(e) => e.target.value && onMove(Number(e.target.value))}>
             <option value="">Move to…</option>
             {targets.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
-          </select>
+          </Select>
         )}
       </div>
     </figure>

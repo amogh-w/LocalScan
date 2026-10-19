@@ -1,7 +1,8 @@
 @echo off
 rem Starts Local Scan: builds the frontend when needed, then serves everything on port 8010.
-rem   run.bat          normal use (double-click works too)
-rem   run.bat -Dev     backend with auto-reload on :8010 + Vite dev server on :5173
+rem   run.bat          normal use (double-click works too): server hidden, system-tray icon (open, copy phone link, start with Windows)
+rem   run.bat -Console server in this window, with logs, the LAN URL and a QR code
+rem   run.bat -Dev     backend with auto-reload on :8010 + Vite dev server on :5173 (open :5173)
 cd /d "%~dp0"
 
 if not exist frontend\node_modules (
@@ -13,7 +14,14 @@ if not exist frontend\node_modules (
 
 if /i "%~1"=="-Dev" (
     start "Vite dev server" /D frontend cmd /c npm run dev
+    uv run python scripts\lan_qr.py 5173
     uv run --extra paddle --directory backend uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload
+    goto :end
+)
+
+if /i not "%~1"=="-Console" (
+    uv sync --extra paddle
+    start "" ".venv\Scripts\pythonw.exe" scripts\tray.py
     goto :end
 )
 

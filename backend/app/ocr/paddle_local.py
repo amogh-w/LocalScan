@@ -32,6 +32,30 @@ def _load(lang: str, device: str) -> Any:
         return _models[key]
 
 
+def loaded(lang: str, device: str) -> bool:
+    return (lang, device) in _models
+
+
+def preload(lang: str, device: str) -> None:
+    """Load the models now instead of on the first page."""
+    _load(lang, device)
+
+
+def unload() -> None:
+    """Drop the models and give their GPU memory back. Waits for a page that is being read."""
+    with _lock:
+        _models.clear()
+    import gc
+
+    gc.collect()
+    try:
+        import paddle
+
+        paddle.device.cuda.empty_cache()
+    except Exception:  # noqa: BLE001 - freeing memory is best effort
+        pass
+
+
 class PaddleLocalOcr:
     name = "paddle_local"
 

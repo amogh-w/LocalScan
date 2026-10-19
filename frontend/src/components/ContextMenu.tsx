@@ -77,8 +77,8 @@ export default function ContextMenu({ x, y, items, onClose }: {
   };
 
   const row = (item: MenuItem, depth = 0) => (
-    <button key={`${depth}:${item.label}`} role="menuitem" className={`ctx-item${item.danger ? " danger" : ""}`}
-      disabled={item.disabled} style={depth ? { paddingLeft: `calc(var(--ctl-px-sm) + ${depth * 0.9}rem)` } : undefined}
+    <button key={`${depth}:${item.label}`} role="menuitem" className={`menu-item${item.danger ? " danger" : ""}`}
+      disabled={item.disabled} style={depth ? { paddingLeft: `calc(0.875rem + ${depth * 0.9}rem)` } : undefined}
       aria-haspopup={item.children ? "menu" : undefined} aria-expanded={item.children ? open === item.label : undefined}
       onClick={() => choose(item)}>
       {item.icon}
@@ -88,7 +88,7 @@ export default function ContextMenu({ x, y, items, onClose }: {
   );
 
   return (
-    <div ref={ref} className="ctx-menu" role="menu" style={pos} onKeyDown={key} onContextMenu={(e) => e.preventDefault()}>
+    <div ref={ref} className="menu ctx-menu" role="menu" style={pos} onKeyDown={key} onContextMenu={(e) => e.preventDefault()}>
       {items.map((item) => (
         <div key={item.label}>
           {row(item)}

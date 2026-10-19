@@ -1,0 +1,12 @@
+# Lucide icons for the sprite. UI.confirm and UI.toast draw from it; the React screens use lucide-react directly.
+circle-check
+circle-x
+info
+triangle-alert
+trash-2
+rotate-ccw
+check
+x
+folder-input
+languages
+power

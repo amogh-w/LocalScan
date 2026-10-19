@@ -13,6 +13,8 @@ dependencies = [
     "pillow>=11.0",
     "python-multipart>=0.0.12",
     "qrcode>=8.0",
+    "psutil>=6.0",  # find and stop the helper services (services.py)
+    "pystray>=0.19",  # the system-tray icon (scripts/tray.py)
 ]
 
 [project.optional-dependencies]

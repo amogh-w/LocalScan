@@ -1,5 +1,6 @@
 """Print the addresses to open Local Scan and a QR code for the phone (called by run.bat)."""
 import socket
+import sys
 
 import qrcode
 
@@ -11,8 +12,9 @@ except OSError:
     ip = "127.0.0.1"
 finally:
     s.close()
-url = f"http://{ip}:8010"
-print(f"\n  On this PC:   http://localhost:8010\n  On the phone: {url}  (same Wi-Fi)\n")
+port = int(sys.argv[1]) if len(sys.argv) > 1 else 8010  # run.bat -Dev passes 5173, the Vite dev server
+url = f"http://{ip}:{port}"
+print(f"\n  On this PC:   http://localhost:{port}\n  On the phone: {url}  (same Wi-Fi)\n")
 q = qrcode.QRCode(border=1)
 q.add_data(url)
 try:

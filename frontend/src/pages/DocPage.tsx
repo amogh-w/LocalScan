@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { api, flattenFolders, imageUrl, prepareImage, previewUrl, translatedUrl, type Doc, type PageTranslation, type Filter, type Folder, type Page, type Point } from "../api";
 import ContextMenu, { type MenuItem } from "../components/ContextMenu";
+import { Seg, ask, tone } from "../components/kit";
 import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
 import NameOptions from "../components/NameOptions";
@@ -112,7 +113,10 @@ export default function DocPage({ id }: { id: string }) {
   });
 
   const removeCopied = () => run(async () => {
-    if (sorted?.kind !== "split" || !window.confirm(`Remove these ${sorted.copied.length} pages from this scan? They stay in the new documents, and the removed copies go to the trash.`)) return;
+    if (sorted?.kind !== "split" || !await ask({
+      title: `Remove these ${sorted.copied.length} pages from this scan?`,
+      text: "They stay in the new documents, and the removed copies go to the trash.", ok: "Remove", icon: "trash-2", danger: true,
+    })) return;
     setDoc(await api.removePages(id, sorted.copied));
     setSorted({ ...sorted, removed: true });
   });
@@ -162,7 +166,9 @@ export default function DocPage({ id }: { id: string }) {
     });
 
   const removePageTranslation = async (p: Page) => {
-    if (!window.confirm(`Remove the saved translation of page ${doc!.pages.indexOf(p) + 1}?`)) return;
+    if (!await ask({
+      title: `Remove the saved translation of page ${doc!.pages.indexOf(p) + 1}?`, ok: "Remove", icon: "trash-2", danger: true,
+    })) return;
     await run(async () => {
       setDoc(await api.clearPageTranslation(id, p.id));
       await loadStatus();
@@ -170,7 +176,10 @@ export default function DocPage({ id }: { id: string }) {
   };
 
   const removeAllTranslations = async () => {
-    if (!window.confirm("Remove every saved translation of this document and its PDFs? Your pages and photos stay.")) return;
+    if (!await ask({
+      title: "Remove every saved translation?", text: "This also removes the PDFs. Your pages and photos stay.",
+      ok: "Remove all", icon: "trash-2", danger: true,
+    })) return;
     await run(async () => {
       setDoc(await api.clearTranslations(id));
       await loadStatus();
@@ -212,12 +221,15 @@ export default function DocPage({ id }: { id: string }) {
   };
 
   const removePage = async (p: Page) => {
-    if (!confirmDelete()) return;
+    if (!await ask({ title: "Move this page to the trash?", ok: "Move to trash", icon: "trash-2", danger: true })) return;
     await run(async () => setDoc(await api.deletePage(id, p.id)));
   };
 
   const removeDoc = async () => {
-    if (!window.confirm(`Move "${doc.name}" to the trash?`)) return;
+    if (!await ask({
+      title: `Move "${doc.name}" to the trash?`, text: "You can restore it from the trash for 30 days.",
+      ok: "Move to trash", icon: "trash-2", danger: true,
+    })) return;
     await run(async () => {
       await api.deleteDoc(id);
       location.hash = "#/";
@@ -282,7 +294,10 @@ export default function DocPage({ id }: { id: string }) {
   });
 
   const deletePages = async (ids: string[]) => {
-    if (!window.confirm(`Move ${ids.length === 1 ? "this page" : `these ${ids.length} pages`} to the trash?`)) return;
+    if (!await ask({
+      title: `Move ${ids.length === 1 ? "this page" : `these ${ids.length} pages`} to the trash?`,
+      ok: "Move to trash", icon: "trash-2", danger: true,
+    })) return;
     await run(async () => {
       setDoc(await api.removePages(id, ids));
       clearPicked();
@@ -316,17 +331,17 @@ export default function DocPage({ id }: { id: string }) {
 
   const addButtons = (
     <div className="add-grid">
-      <label className={`btn primary${busy ? " disabled" : ""}`}>
+      <label className={`btn btn-tinted${busy ? " pointer-events-none opacity-40" : ""}`}>
         <Camera /> Take photo
         <input type="file" accept="image/*" capture="environment" hidden disabled={busy}
           onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
       </label>
-      <label className={`btn${busy ? " disabled" : ""}`} title="Choose photos">
+      <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Choose photos">
         <Images /> Photos
         <input type="file" accept="image/*" multiple hidden disabled={busy}
           onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
       </label>
-      <label className={`btn${busy ? " disabled" : ""}`} title="Import PDF">
+      <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Import PDF">
         <FileUp /> PDF
         <input type="file" accept="application/pdf" hidden disabled={busy}
           onChange={(e) => (importPdf(e.target.files), (e.target.value = ""))} />
@@ -339,11 +354,11 @@ export default function DocPage({ id }: { id: string }) {
       <Header
         title={<DocTitle doc={doc} onChange={setDoc} onError={setError} />}
         right={
-          <AsyncButton className="icon-btn" onClick={removeDoc} disabled={busy} ariaLabel="Move document to the trash"
+          <AsyncButton className="btn btn-icon btn-plain" onClick={removeDoc} disabled={busy} ariaLabel="Move document to the trash"
             title="Move document to the trash" icon={<Trash2 />} />
         }
       />
-      {error && <p className="error banner">{error}</p>}
+      {error && <p className="error banner" role="alert">{error}</p>}
 
       <div className={`workspace show-${tab}`}>
         {/* Pages: thumbnail grid */}
@@ -353,14 +368,14 @@ export default function DocPage({ id }: { id: string }) {
             {picked.size > 0 ? (
               <span className="picked-bar">
                 <span className="small">{picked.size} selected</span>
-                <button className="btn small" disabled={busy} aria-haspopup="menu"
+                <button className="btn btn-gray btn-sm" disabled={busy} aria-haspopup="menu"
                   onClick={(e) => {
                     const r = e.currentTarget.getBoundingClientRect();
                     openMenu(r.left, r.bottom + 4, doc.pages.filter((q) => picked.has(q.id)).map((q) => q.id));
                   }}>
                   Actions
                 </button>
-                <button className="icon-btn" onClick={clearPicked} aria-label="Clear selection" title="Clear selection (Esc)"><X /></button>
+                <button className="btn btn-icon btn-sm btn-plain" onClick={clearPicked} aria-label="Clear selection" title="Clear selection (Esc)"><X /></button>
               </span>
             ) : (
               <span className="muted small">{doc.pages.length}</span>
@@ -381,7 +396,7 @@ export default function DocPage({ id }: { id: string }) {
               {doc.pages.map((p, i) => (
                 <button
                   key={p.id}
-                  className={`thumb${p.id === selected ? " selected" : ""}${picked.has(p.id) ? " picked" : ""}`}
+                  className={`page-thumb${p.id === selected ? " selected" : ""}${picked.has(p.id) ? " picked" : ""}`}
                   onClick={(e) => clickThumb(e, p)}
                   onContextMenu={(e) => {
                     e.preventDefault();
@@ -407,17 +422,11 @@ export default function DocPage({ id }: { id: string }) {
         <main className="panel page-panel">
           {page ? (
             <>
-              <div className="seg">
-                <button className={mode === "crop" ? "on" : ""} onClick={() => setMode("crop")}>
-                  <Crop /> Crop
-                </button>
-                <button className={mode === "preview" ? "on" : ""} onClick={() => setMode("preview")}>
-                  <Eye /> Preview
-                </button>
-                <button className={mode === "translated" ? "on" : ""} onClick={() => setMode("translated")}>
-                  <Languages /> Translated
-                </button>
-              </div>
+              <Seg label="View" value={mode} onChange={setMode} options={[
+                { id: "crop", label: <><Crop /> Crop</> },
+                { id: "preview", label: <><Eye /> Preview</> },
+                { id: "translated", label: <><Languages /> Translated</> },
+              ]} />
               <div className="stage">
                 {mode === "crop" ? (
                   <CornerEditor
@@ -447,7 +456,7 @@ export default function DocPage({ id }: { id: string }) {
                         <>
                           <h3>Page {index + 1} is not translated yet</h3>
                           <p>Translate just this page to see the English version here. The other pages are left alone.</p>
-                          <AsyncButton className="btn primary" icon={<Languages />} onClick={() => translateThisPage(page)}>
+                          <AsyncButton className="btn btn-filled" icon={<Languages />} onClick={() => translateThisPage(page)}>
                             Translate this page
                           </AsyncButton>
                         </>
@@ -459,14 +468,14 @@ export default function DocPage({ id }: { id: string }) {
                 )}
               </div>
               <nav className="pager" aria-label="Page navigation">
-                <button className="btn small" disabled={index <= 0} onClick={() => goTo(index - 1)}
+                <button className="btn btn-icon btn-sm btn-gray" disabled={index <= 0} onClick={() => goTo(index - 1)}
                   aria-label="Previous page" title="Previous page">
                   <ChevronLeft />
                 </button>
                 <span className="pager-label">
                   Page <b>{index + 1}</b> of {doc.pages.length}
                 </span>
-                <button className="btn small" disabled={index >= doc.pages.length - 1} onClick={() => goTo(index + 1)}
+                <button className="btn btn-icon btn-sm btn-gray" disabled={index >= doc.pages.length - 1} onClick={() => goTo(index + 1)}
                   aria-label="Next page" title="Next page">
                   <ChevronRight />
                 </button>
@@ -491,7 +500,7 @@ export default function DocPage({ id }: { id: string }) {
                 <h3 className="with-icon"><Palette /> Color</h3>
                 <div className="filter-grid">
                   {FILTERS.map((f) => (
-                    <button key={f.id} className={`pill${page.filter === f.id ? " on" : ""}`} disabled={busy}
+                    <button key={f.id} className="chip justify-center" disabled={busy}
                       onClick={() => updatePage(page, { filter: f.id })} aria-pressed={page.filter === f.id}>
                       <f.icon /> {f.label}
                     </button>
@@ -509,45 +518,45 @@ export default function DocPage({ id }: { id: string }) {
                     })}>
                     Detect
                   </AsyncButton>
-                  <button className="btn small" disabled={busy} title="Use the whole photo"
+                  <button className="btn btn-gray btn-sm" disabled={busy} title="Use the whole photo"
                     onClick={() => updatePage(page, { corners: FULL })}>
                     <Maximize /> Full
                   </button>
-                  <button className="btn small" disabled={busy} title="Rotate left"
+                  <button className="btn btn-gray btn-sm" disabled={busy} title="Rotate left"
                     onClick={() => updatePage(page, { rotation: (page.rotation + 270) % 360 })}>
                     <RotateCcw /> Left
                   </button>
-                  <button className="btn small" disabled={busy} title="Rotate right"
+                  <button className="btn btn-gray btn-sm" disabled={busy} title="Rotate right"
                     onClick={() => updatePage(page, { rotation: (page.rotation + 90) % 360 })}>
                     <RotateCw /> Right
                   </button>
                 </div>
               </section>
 
-              <section className="opt-group">
+              <section className="opt-group wide">
                 <h3 className="with-icon"><SlidersHorizontal /> Page</h3>
                 <div className="tool-grid">
-                  <button className="btn small" disabled={busy || index === 0} onClick={() => move(index, index - 1)}
+                  <button className="btn btn-gray btn-sm" disabled={busy || index === 0} onClick={() => move(index, index - 1)}
                     title="Move page earlier">
                     <ArrowLeft /> Earlier
                   </button>
-                  <button className="btn small" disabled={busy || index === doc.pages.length - 1}
+                  <button className="btn btn-gray btn-sm" disabled={busy || index === doc.pages.length - 1}
                     onClick={() => move(index, index + 1)} title="Move page later">
                     <ArrowRight /> Later
                   </button>
                   {doc.pages.length >= 2 && (
                     <>
-                      <button className="btn small" disabled={busy} onClick={() => setSorting("split")}
+                      <button className="btn btn-gray btn-sm" disabled={busy} onClick={() => setSorting("split")}
                         title="Find the documents in this scan and put their pages in order">
                         <Split /> Sort
                       </button>
-                      <button className="btn small" disabled={busy} onClick={() => setSorting("order")}
+                      <button className="btn btn-gray btn-sm" disabled={busy} onClick={() => setSorting("order")}
                         title="Keep one document, fix the page order">
                         <ListOrdered /> Fix order
                       </button>
                     </>
                   )}
-                  <AsyncButton className="btn small danger span-2" disabled={busy} onClick={() => removePage(page)} icon={<Trash2 />}>
+                  <AsyncButton className="btn btn-danger-tinted btn-sm span-2" disabled={busy} onClick={() => removePage(page)} icon={<Trash2 />}>
                     Delete page
                   </AsyncButton>
                 </div>
@@ -556,7 +565,7 @@ export default function DocPage({ id }: { id: string }) {
           )}
 
           {doc.pages.length > 0 && (
-            <section className="opt-group export wide">
+            <section className="opt-group wide">
               <h3 className="with-icon"><Languages /> Translate</h3>
               <div className="status-row">
                 <StatusBadge doc={doc} />
@@ -574,18 +583,18 @@ export default function DocPage({ id }: { id: string }) {
                 <div className="translate-part">
                   <h4>
                     This page <span className="muted">(page {index + 1})</span>
-                    <span className={`state-chip${translatedPage(stat) ? " ok" : ""}`}>
+                    <span className={`badge ${translatedPage(stat) ? "badge-tint" : "badge-outline"}`} style={translatedPage(stat) ? tone("green") : undefined}>
                       {translatedPage(stat) ? "Translated" : stat && stat.done > 0 ? "Partly translated" : "Not translated"}
                     </span>
                   </h4>
                   <div className="tool-grid">
-                    <AsyncButton className={`btn small${translatedPage(stat) ? "" : " primary"}`} disabled={busy}
+                    <AsyncButton className={`btn btn-sm ${translatedPage(stat) ? "btn-gray" : "btn-tinted"}`} disabled={busy}
                       icon={translatedPage(stat) ? <RefreshCw /> : <Languages />}
                       onClick={() => translateThisPage(page, translatedPage(stat))}
                       title={translatedPage(stat) ? "Translate this page again" : "Translate only this page"}>
                       {translatedPage(stat) ? "Translate again" : "Translate page"}
                     </AsyncButton>
-                    <AsyncButton className="btn small danger" disabled={busy || !stat?.done} icon={<Trash2 />}
+                    <AsyncButton className="btn btn-danger-tinted btn-sm" disabled={busy || !stat?.done} icon={<Trash2 />}
                       onClick={() => removePageTranslation(page)} title="Remove the saved translation of this page">
                       Remove
                     </AsyncButton>
@@ -607,7 +616,7 @@ export default function DocPage({ id }: { id: string }) {
                 </div>
                 <div className="tool-grid">
                   {(remaining > 0 || doc.status !== "done") && (
-                    <AsyncButton className="btn small primary span-2" disabled={busy} icon={<Languages />}
+                    <AsyncButton className="btn btn-filled btn-sm span-2" disabled={busy} icon={<Languages />}
                       onClick={() => translateAll(false)}
                       title="Translate the pages that are not done yet, then make the three PDFs">
                       {remaining === 0 ? "Make the PDFs"
@@ -615,11 +624,11 @@ export default function DocPage({ id }: { id: string }) {
                         : `Translate remaining (${remaining})`}
                     </AsyncButton>
                   )}
-                  <AsyncButton className="btn small" disabled={busy} icon={<RefreshCw />}
+                  <AsyncButton className="btn btn-gray btn-sm" disabled={busy} icon={<RefreshCw />}
                     onClick={() => translateAll(true)} title="Ignore the saved translations and translate every page again">
                     Translate all again
                   </AsyncButton>
-                  <AsyncButton className="btn small danger" disabled={busy} icon={<Trash2 />}
+                  <AsyncButton className="btn btn-danger-tinted btn-sm" disabled={busy} icon={<Trash2 />}
                     onClick={removeAllTranslations} title="Remove every saved translation and the PDFs">
                     Remove all
                   </AsyncButton>
@@ -635,36 +644,36 @@ export default function DocPage({ id }: { id: string }) {
       {sorting && <SortPages doc={doc} split={sorting === "split"} onClose={() => setSorting(null)} onApplied={applied} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.ids)} onClose={() => setMenu(null)} />}
       {moved && (
-        <div className="toast" role="status">
+        <div className="toasts"><div className="toast" role="status">
           <span>Moved {moved.ids.length === 1 ? "1 page" : `${moved.ids.length} pages`} to {moved.where === "a new scan" ? "a new scan" : moved.where}.</span>
-          <a className="btn small" href={`#/doc/${moved.doc.id}`}>Open</a>
+          <a className="btn btn-gray btn-sm" href={`#/doc/${moved.doc.id}`}>Open</a>
           <AsyncButton onClick={undoMove} icon={<Undo2 />}>Undo</AsyncButton>
-          <button className="icon-btn" onClick={() => setMoved(null)} aria-label="Dismiss" title="Dismiss"><X /></button>
-        </div>
+          <button className="btn btn-icon btn-sm btn-plain" onClick={() => setMoved(null)} aria-label="Dismiss" title="Dismiss"><X /></button>
+        </div></div>
       )}
       {sorted && !moved && (
-        <div className="toast" role="status">
+        <div className="toasts"><div className="toast" role="status">
           <span>
             {sorted.kind === "split"
               ? `Created ${sorted.docs.length} document${sorted.docs.length === 1 ? "" : "s"}. ${sorted.removed ? "The pages were removed from this scan." : "This scan is unchanged."}`
               : "Page order updated."}
           </span>
-          {sorted.kind === "split" && <a className="btn small" href="#/">Library</a>}
+          {sorted.kind === "split" && <a className="btn btn-gray btn-sm" href="#/">Library</a>}
           {sorted.kind === "split" && !sorted.removed && (
             <AsyncButton onClick={removeCopied} icon={<Trash2 />}>Remove from this scan</AsyncButton>
           )}
           {!(sorted.kind === "split" && sorted.removed) && (
             <AsyncButton onClick={undoSort} icon={<Undo2 />}>Undo</AsyncButton>
           )}
-          <button className="icon-btn" onClick={() => setSorted(null)} aria-label="Dismiss" title="Dismiss"><X /></button>
-        </div>
+          <button className="btn btn-icon btn-sm btn-plain" onClick={() => setSorted(null)} aria-label="Dismiss" title="Dismiss"><X /></button>
+        </div></div>
       )}
 
-      <nav className="tabbar" aria-label="Sections">
+      <nav className="tabbar doc-tabbar" aria-label="Sections">
         {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}
+          <button key={t.id} className="tab" onClick={() => setTab(t.id)} aria-selected={tab === t.id}
             aria-current={tab === t.id ? "page" : undefined}>
-            <t.icon />
+            <t.icon className="size-6" />
             <span>{t.label}</span>
             {t.id === "options" && (busy || doc.status === "done") && <span className={`dot ${doc.status}`} />}
           </button>
@@ -674,14 +683,10 @@ export default function DocPage({ id }: { id: string }) {
   );
 }
 
-function confirmDelete() {
-  return window.confirm("Move this page to the trash?");
-}
-
 function Header({ title, right }: { title: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <header className="bar">
-      <a className="icon-btn" href="#/" aria-label="Back" title="Back">
+    <header className="app-bar">
+      <a className="btn btn-icon btn-plain" href="#/" aria-label="Back" title="Back">
         <ChevronLeft />
       </a>
       <div className="bar-title">{title}</div>

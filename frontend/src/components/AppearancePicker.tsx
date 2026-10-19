@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { Palette, Type } from "lucide-react";
-import { ACCENTS, FLAVORS, TEXT_SIZES, useTheme, type Accent, type Flavor, type FlavorChoice } from "../theme";
+import { ACCENTS, FLAVORS, RADII, TEXT_SIZES, useTheme, type Accent, type Flavor, type FlavorChoice } from "../theme";
+import { Seg } from "./kit";
 
 const css = (vars: Record<string, string>) => vars as CSSProperties;
 
@@ -27,29 +28,23 @@ export default function AppearancePicker() {
   const [theme, setTheme] = useTheme();
 
   return (
-    <section className="card form appearance">
+    <section className="card stack appearance">
       <h2 className="with-icon">
         <Palette /> Appearance
       </h2>
 
-      <h3 id="text-label" className="with-icon"><Type /> Text size</h3>
-      <div className="seg text-sizes" role="radiogroup" aria-labelledby="text-label">
-        {TEXT_SIZES.map((x) => (
-          <button key={x.id} role="radio" aria-checked={theme.text === x.id} className={theme.text === x.id ? "on" : ""}
-            onClick={() => setTheme({ text: x.id })}>
-            {x.label}
-          </button>
-        ))}
-      </div>
+      <h3 className="sub-head with-icon"><Type /> Text size</h3>
+      <Seg className="wide" label="Text size" value={theme.text} onChange={(text) => setTheme({ text })}
+        options={TEXT_SIZES.map((x) => ({ id: x.id, label: x.label }))} />
 
-      <h3 id="flavor-label">Flavor</h3>
+      <h3 id="flavor-label" className="sub-head">Flavor</h3>
       <div className="flavors" role="radiogroup" aria-labelledby="flavor-label">
         {CHOICES.map((c) => (
           <button
             key={c.id}
             role="radio"
             aria-checked={theme.flavor === c.id}
-            className={`flavor${theme.flavor === c.id ? " on" : ""}`}
+            className="flavor"
             onClick={() => setTheme({ flavor: c.id })}
             title={c.id === "auto" ? "Follow the system: Latte when light, Mocha when dark" : c.label}
           >
@@ -63,7 +58,7 @@ export default function AppearancePicker() {
         ))}
       </div>
 
-      <h3 id="accent-label">Accent</h3>
+      <h3 id="accent-label" className="sub-head">Accent</h3>
       <div className="swatches" role="radiogroup" aria-labelledby="accent-label">
         {ACCENTS.map((a) => (
           <button
@@ -72,15 +67,20 @@ export default function AppearancePicker() {
             aria-checked={theme.accent === a}
             aria-label={a}
             title={a}
-            className={`swatch${theme.accent === a ? " on" : ""}`}
+            className="swatch"
             style={css({ "--sw": `var(--ctp-${a})` })}
             onClick={() => setTheme({ accent: a })}
           />
         ))}
       </div>
       <p className="accent-name">
-        <b>{theme.accent}</b> is used for buttons, the crop frame and progress. Text size and colors are saved on this device.
+        <b>{theme.accent}</b> is used for buttons, the crop frame and progress.
       </p>
+
+      <h3 className="sub-head">Corner radius</h3>
+      <Seg className="wide" label="Corner radius" value={theme.radius} onChange={(radius) => setTheme({ radius })}
+        options={RADII.map((r) => ({ id: r.id, label: r.label }))} />
+      <p className="accent-name">Text size, colors and corners are saved on this device.</p>
     </section>
   );
 }

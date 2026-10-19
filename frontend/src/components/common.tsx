@@ -4,9 +4,10 @@ import {
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { fileUrl, type Doc, type OutputKind } from "../api";
+import { tone } from "./kit";
 
 /** A button for an action that takes time: it shows a spinner in place of its icon and ignores clicks until done. */
-export function AsyncButton({ onClick, icon, className = "btn small", disabled, title, ariaLabel, children }: {
+export function AsyncButton({ onClick, icon, className = "btn btn-gray btn-sm", disabled, title, ariaLabel, children }: {
   onClick: () => unknown; icon?: ReactNode; className?: string; disabled?: boolean; title?: string; ariaLabel?: string;
   children?: ReactNode;
 }) {
@@ -28,6 +29,9 @@ export function AsyncButton({ onClick, icon, className = "btn small", disabled, 
   );
 }
 
+/** A status as a badge: neutral while a draft, otherwise tinted by meaning. */
+const STATUS_TONES = { draft: undefined, queued: "yellow", processing: undefined, done: "green", error: "red" } as const;
+
 const STATUS_ICONS = {
   draft: CircleDashed,
   queued: Clock,
@@ -46,7 +50,8 @@ export function StatusBadge({ doc }: { doc: Doc }) {
         ];
   const Icon = STATUS_ICONS[doc.status];
   return (
-    <span className={`badge ${doc.status}`}>
+    <span className={`badge ${doc.status === "draft" ? "badge-outline" : "badge-tint"}`}
+      style={STATUS_TONES[doc.status] ? tone(STATUS_TONES[doc.status]!) : undefined}>
       <Icon className={doc.status === "processing" ? "spin" : undefined} />
       {text}
     </span>
@@ -68,11 +73,11 @@ export function PdfLinks({ doc, layout = "row" }: { doc: Doc; layout?: "row" | "
   return (
     <div className={`pdf-links ${layout}`}>
       {PDFS.filter((p) => doc.outputs[p.kind]).map((p) => (
-        <a key={p.kind} className={`pdf-link${p.kind === "translated" ? " main" : ""}`} href={fileUrl(doc.id, p.kind, true)}
+        <a key={p.kind} className={`btn ${layout === "row" ? "btn-sm " : ""}${p.kind === "translated" ? "btn-tinted" : "btn-gray"}`} href={fileUrl(doc.id, p.kind, true)}
           target="_blank" rel="noopener" title={`${p.full}: opens in a new tab`} aria-label={`${p.full} (opens in a new tab)`}>
           <p.icon />
           <span>{layout === "stack" ? p.full : p.short}</span>
-          {layout === "stack" && <ExternalLink className="ext" />}
+          {layout === "stack" && <ExternalLink className="ext" aria-hidden="true" />}
         </a>
       ))}
     </div>

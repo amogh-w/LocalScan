@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { FileText, Image as ImageIcon, RotateCcw } from "lucide-react";
 import type { Settings } from "../api";
 import { AsyncButton } from "./common";
+import { Seg } from "./kit";
 
 type Save = (patch: { images?: Record<string, number>; export?: Record<string, number | string> }) => Promise<void>;
 
@@ -21,7 +22,8 @@ function Slider({ label, value, min, max, step, unit, onCommit }: {
   return (
     <label className="range-row">
       <span>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={v} onChange={(e) => setV(Number(e.target.value))}
+      <input className="range" type="range" min={min} max={max} step={step} value={v} onChange={(e) => setV(Number(e.target.value))}
+        style={{ "--p": `${((v - min) / (max - min)) * 100}%` } as CSSProperties}
         onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
       <b>{v}{unit}</b>
     </label>
@@ -35,16 +37,14 @@ export default function ImageSettings({ s, save }: { s: Settings; save: Save }) 
   const [dpi, quality] = s.export.effective;
 
   return (
-    <section className="card form image-settings">
+    <section className="card stack">
       <h2 className="with-icon"><ImageIcon /> Photos &amp; PDFs</h2>
 
-      <h3 id="import-label">Photo import</h3>
-      <div className="seg wide" role="radiogroup" aria-labelledby="import-label">
-        <button role="radio" aria-checked={!limited} className={!limited ? "on" : ""}
-          onClick={() => limited && save({ images: { max_edge: 0 } })}>Keep every pixel</button>
-        <button role="radio" aria-checked={limited} className={limited ? "on" : ""}
-          onClick={() => !limited && save({ images: { max_edge: s.defaults.images.max_edge || 4000 } })}>Limit size</button>
-      </div>
+      <h3 className="sub-head">Photo import</h3>
+      <Seg className="wide" label="Photo import" value={limited ? "limit" : "keep"}
+        onChange={(v) => (v === "keep" ? limited && save({ images: { max_edge: 0 } })
+          : !limited && save({ images: { max_edge: s.defaults.images.max_edge || 4000 } }))}
+        options={[{ id: "keep", label: "Keep every pixel" }, { id: "limit", label: "Limit size" }]} />
       {limited ? (
         <Slider label="Longest side" value={s.images.max_edge} min={2000} max={8000} step={500} unit=" px"
           onCommit={(v) => save({ images: { max_edge: v } })} />
@@ -55,31 +55,26 @@ export default function ImageSettings({ s, save }: { s: Settings; save: Save }) 
           : "Photos are stored exactly as the camera made them. Large photos take longer to upload and process."}
       </p>
 
-      <h3 id="dpi-label">Page resolution</h3>
-      <div className="seg wide" role="radiogroup" aria-labelledby="dpi-label">
-        {s.page_dpis.map((d) => (
-          <button key={d} role="radio" aria-checked={s.images.page_dpi === d} className={s.images.page_dpi === d ? "on" : ""}
-            onClick={() => save({ images: { page_dpi: d } })}>
-            {d}{d === s.defaults.images.page_dpi ? " (default)" : ""}
-          </button>
-        ))}
-      </div>
+      <h3 className="sub-head">Page resolution</h3>
+      <Seg className="wide" label="Page resolution" value={String(s.images.page_dpi)}
+        onChange={(d) => save({ images: { page_dpi: Number(d) } })}
+        options={s.page_dpis.map((d) => ({ id: String(d), label: `${d}${d === s.defaults.images.page_dpi ? " (default)" : ""}` }))} />
       <p className="muted small">
         The cleaned page, in dpi (dots per inch). Higher is sharper for small print but slower and bigger. It can only
         be as sharp as your photo.
       </p>
 
-      <h3 id="pdf-label" className="with-icon"><FileText /> PDF quality</h3>
+      <h3 id="pdf-label" className="sub-head with-icon"><FileText /> PDF quality</h3>
       <div className="preset-grid" role="radiogroup" aria-labelledby="pdf-label">
         {Object.entries(s.presets).map(([id, p]) => (
-          <button key={id} role="radio" aria-checked={preset === id} className={`preset${preset === id ? " on" : ""}`}
+          <button key={id} role="radio" aria-checked={preset === id} className="preset"
             onClick={() => save({ export: { preset: id } })}>
-            <b>{PRESET_INFO[id]?.title ?? id}{id === s.defaults.export.preset && <span className="badge-default">Default</span>}</b>
+            <b>{PRESET_INFO[id]?.title ?? id}{id === s.defaults.export.preset && <span className="badge badge-outline">Default</span>}</b>
             <span>{p.dpi} dpi, quality {p.quality}</span>
             <span className="muted small">{PRESET_INFO[id]?.hint}</span>
           </button>
         ))}
-        <button role="radio" aria-checked={preset === "custom"} className={`preset${preset === "custom" ? " on" : ""}`}
+        <button role="radio" aria-checked={preset === "custom"} className="preset"
           onClick={() => save({ export: { preset: "custom" } })}>
           <b>Custom</b>
           <span>Choose both yourself</span>
@@ -99,7 +94,7 @@ export default function ImageSettings({ s, save }: { s: Settings; save: Save }) 
         The Original keeps its searchable text. Changes apply to new uploads and the next time a document is translated.
       </p>
 
-      <AsyncButton className="btn small reset-btn" icon={<RotateCcw />}
+      <AsyncButton className="btn btn-gray btn-sm self-start" icon={<RotateCcw />}
         onClick={() => save({ images: s.defaults.images, export: s.defaults.export })}>
         Reset to defaults
       </AsyncButton>
