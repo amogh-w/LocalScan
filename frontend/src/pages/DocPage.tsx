@@ -498,19 +498,14 @@ export default function DocPage({ id }: { id: string }) {
             <>
               <section className="opt-group">
                 <h3 className="with-icon"><Palette /> Color</h3>
-                <div className="filter-grid">
-                  {FILTERS.map((f) => (
-                    <button key={f.id} className="chip justify-center" disabled={busy}
-                      onClick={() => updatePage(page, { filter: f.id })} aria-pressed={page.filter === f.id}>
-                      <f.icon /> {f.label}
-                    </button>
-                  ))}
-                </div>
+                <Seg label="Color" className="wide" value={page.filter}
+                  onChange={(f) => updatePage(page, { filter: f })}
+                  options={FILTERS.map((f) => ({ id: f.id, label: <><f.icon /> {f.label}</>, disabled: busy }))} />
               </section>
 
               <section className="opt-group">
-                <h3 className="with-icon"><Crop /> Crop</h3>
-                <div className="tool-grid">
+                <h3 className="with-icon"><Crop /> Crop and page</h3>
+                <div className="tool-grid four">
                   <AsyncButton disabled={busy} title="Detect the page edges again" icon={<ScanSearch />}
                     onClick={() => run(async () => {
                       const saved = await api.autodetect(id, page.id);
@@ -530,12 +525,6 @@ export default function DocPage({ id }: { id: string }) {
                     onClick={() => updatePage(page, { rotation: (page.rotation + 90) % 360 })}>
                     <RotateCw /> Right
                   </button>
-                </div>
-              </section>
-
-              <section className="opt-group wide">
-                <h3 className="with-icon"><SlidersHorizontal /> Page</h3>
-                <div className="tool-grid">
                   <button className="btn btn-gray btn-sm" disabled={busy || index === 0} onClick={() => move(index, index - 1)}
                     title="Move page earlier">
                     <ArrowLeft /> Earlier
@@ -634,7 +623,7 @@ export default function DocPage({ id }: { id: string }) {
                   </AsyncButton>
                 </div>
               </div>
-              {doc.status === "done" && <PdfLinks doc={doc} layout="stack" />}
+              {doc.status === "done" && <PdfLinks doc={doc} />}
             </section>
           )}
           </div>

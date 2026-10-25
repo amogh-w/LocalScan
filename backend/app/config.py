@@ -1,5 +1,6 @@
 """Settings loaded from config.toml, with runtime overrides stored in data/settings.json."""
 import json
+import os
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,8 @@ class Settings:
     def __init__(self) -> None:
         with CONFIG_PATH.open("rb") as f:
             self._base: dict[str, Any] = tomllib.load(f)
-        self.data_dir = (ROOT / self._base["server"]["data_dir"]).resolve()
+        # LOCALSCAN_DATA_DIR points a second instance at its own library (scripts/demo_library.py)
+        self.data_dir = (ROOT / os.environ.get("LOCALSCAN_DATA_DIR", self._base["server"]["data_dir"])).resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self._overrides_path = self.data_dir / "settings.json"
         self._overrides: dict[str, Any] = {}
