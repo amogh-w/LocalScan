@@ -71,7 +71,7 @@ const PDFS: { kind: OutputKind; short: string; full: string; icon: LucideIcon }[
  */
 export function PdfLinks({ doc, layout = "row" }: { doc: Doc; layout?: "row" | "stack" }) {
   return (
-    <div className={`pdf-links ${layout}`}>
+    <div className={`pdf-links ${layout === "row" ? "cols" : "stack"}`}>
       {PDFS.filter((p) => doc.outputs[p.kind]).map((p) => (
         <a key={p.kind} className={`btn ${layout === "row" ? "btn-sm " : ""}${p.kind === "translated" ? "btn-tinted" : "btn-gray"}`} href={fileUrl(doc.id, p.kind, true)}
           target="_blank" rel="noopener" title={`${p.full}: opens in a new tab`} aria-label={`${p.full} (opens in a new tab)`}>

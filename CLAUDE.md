@@ -192,7 +192,7 @@ for the Library and the document screen).
 rules and its `references/checklist.md`). `ui/kit.css` + `ui/palette.css` are copies of the kit; do not edit them,
 put Local Scan specifics in `src/app.css` (imported by `main.tsx`, built by the `@tailwindcss/vite` plugin, so there is
 no separate CSS build). Use kit classes (`btn btn-filled|tinted|gray|plain|danger-tinted`, `btn-sm`, `btn-icon`, `card`,
-`field`, `chip`, `badge badge-tint`, `alert tone-*`, `seg`, `menu`, `modal`, `tabbar`/`tab`, `side-item`) and kit tokens
+`field`, `chip`, `badge badge-tint`, `alert tone-*`, `seg` (`seg-fill` = full width), `menu`, `modal`, `tabbar`/`tab`, `side-item`) and kit tokens
 (`bg-base`, `var(--ctp-*)`, `--accent`, `--r-ctl|card|sheet`); never raw hex. Layers: page mantle, card base, control
 surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabbar`).
 - `public/theme.js` (copy of `ui/theme.js`) sets flavor, accent and radius before first paint from the kit's

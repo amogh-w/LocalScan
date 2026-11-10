@@ -41,7 +41,7 @@ export default function ImageSettings({ s, save }: { s: Settings; save: Save }) 
       <h2 className="with-icon"><ImageIcon /> Photos &amp; PDFs</h2>
 
       <h3 className="sub-head">Photo import</h3>
-      <Seg className="wide" label="Photo import" value={limited ? "limit" : "keep"}
+      <Seg className="seg-fill" label="Photo import" value={limited ? "limit" : "keep"}
         onChange={(v) => (v === "keep" ? limited && save({ images: { max_edge: 0 } })
           : !limited && save({ images: { max_edge: s.defaults.images.max_edge || 4000 } }))}
         options={[{ id: "keep", label: "Keep every pixel" }, { id: "limit", label: "Limit size" }]} />
@@ -56,7 +56,7 @@ export default function ImageSettings({ s, save }: { s: Settings; save: Save }) 
       </p>
 
       <h3 className="sub-head">Page resolution</h3>
-      <Seg className="wide" label="Page resolution" value={String(s.images.page_dpi)}
+      <Seg className="seg-fill" label="Page resolution" value={String(s.images.page_dpi)}
         onChange={(d) => save({ images: { page_dpi: Number(d) } })}
         options={s.page_dpis.map((d) => ({ id: String(d), label: `${d}${d === s.defaults.images.page_dpi ? " (default)" : ""}` }))} />
       <p className="muted small">

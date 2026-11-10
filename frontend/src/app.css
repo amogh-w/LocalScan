@@ -83,10 +83,7 @@ svg.lucide { flex: none; }
 .chip svg { width: 1rem; height: 1rem; }
 .sub-head { font-size: 0.8125rem; font-weight: 600; color: var(--ctp-subtext1); margin-top: 4px; }
 .sub-head.with-icon svg { width: 1rem; height: 1rem; color: var(--accent); }
-.seg.wide { display: grid; align-self: stretch; }
-.seg.wide button { padding-inline: 0.5rem; }
-.seg button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
-.seg button svg { width: 1rem; height: 1rem; }
+.seg-fill button { padding-inline: 0.5rem; }
 .range-row { display: grid; grid-template-columns: 7rem 1fr 5.5rem; align-items: center; gap: 12px; }
 .range-row b { text-align: right; font-weight: 600; }
 @media (max-width: 480px) { .range-row { grid-template-columns: 1fr; gap: 4px; } .range-row b { text-align: left; } }
@@ -203,7 +200,7 @@ svg.lucide { flex: none; }
 .picked-bar { display: inline-flex; align-items: center; gap: 6px; }
 .page-panel { align-items: center; overflow: hidden; }
 .page-panel .seg { align-self: center; flex: none; }
-.stage { container-type: size; flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+.stage { container-type: size; flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; } /* room for the corner handles, which stick out of the page */
 .preview {
   width: auto; height: auto; max-width: 100%; max-height: 100cqh; min-width: 0; flex: none;
   object-fit: contain; border-radius: 6px; box-shadow: var(--shadow-1);
@@ -235,7 +232,6 @@ svg.lucide { flex: none; }
 }
 .opt-group:first-child { border-top: 0; padding-top: 0; }
 .opt-group:last-child { padding-bottom: 0; }
-.seg.wide { grid-auto-flow: column; grid-auto-columns: 1fr; }
 .tool-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .tool-grid.four .btn { padding-inline: 0.25rem; }
 .opt-group h3 { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ctp-subtext1); }
@@ -342,10 +338,10 @@ p.suggestion { background: transparent; padding: 0 10px; font-size: 0.8125rem; }
 .twisty svg { width: 0.9375rem; height: 0.9375rem; }
 .row-actions { display: none; gap: 0; }
 .side-item:hover .row-actions, .side-item:focus-within .row-actions { display: flex; }
-.side-item:hover .side-count { display: none; }
+.folder-row:hover .side-count, .tag-row:hover .side-count { display: none; } /* swapped for the row's actions; the other rows have none */
 .row-actions .btn { width: 1.75rem; height: 1.75rem; }
 .row-actions .btn svg { width: 0.9375rem; height: 0.9375rem; }
-@media (pointer: coarse) { .row-actions { display: flex; } .side-item .side-count { display: none; } }
+@media (pointer: coarse) { .row-actions { display: flex; } .folder-row .side-count, .tag-row .side-count { display: none; } }
 .side-input { font-weight: 500; font-size: 0.875rem; padding: 3px 6px; border-color: var(--accent); }
 .side-item.editing:hover { background: transparent; }
 .drop-over { outline: 2px dashed var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: var(--r-ctl); }
@@ -398,13 +394,14 @@ p.suggestion { background: transparent; padding: 0 10px; font-size: 0.8125rem; }
 .tile-foot { padding: 10px 14px 14px; }
 .tile-foot.actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .tile-foot.actions .btn { min-width: 0; padding-inline: 0.75rem; }
+.tile-foot .btn { min-height: 3rem; } /* one height for every footer: the PDF trio and the single next-step button */
 .tile-cta { width: 100%; }
 
 /* The three PDFs of a finished document. They open in a new tab. */
 .pdf-links { display: grid; gap: 8px; }
-.pdf-links.row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pdf-links.cols { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .pdf-links .btn { width: 100%; }
-.pdf-links.row .btn { height: auto; flex-direction: column; gap: 3px; padding: 9px 2px 8px; font-size: 0.75rem; line-height: 1.2; min-width: 0; }
+.pdf-links.cols .btn { height: auto; flex-direction: column; gap: 3px; padding: 6px 4px; font-size: 0.75rem; line-height: 1.2; min-width: 0; }
 .pdf-links.stack .btn { justify-content: flex-start; }
 .pdf-links .ext { margin-left: auto; opacity: 0.6; }
 .pdf-links.stack .ext { width: 1rem; height: 1rem; }

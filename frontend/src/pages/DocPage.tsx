@@ -498,7 +498,7 @@ export default function DocPage({ id }: { id: string }) {
             <>
               <section className="opt-group">
                 <h3 className="with-icon"><Palette /> Color</h3>
-                <Seg label="Color" className="wide" value={page.filter}
+                <Seg label="Color" className="seg-fill" value={page.filter}
                   onChange={(f) => updatePage(page, { filter: f })}
                   options={FILTERS.map((f) => ({ id: f.id, label: <><f.icon /> {f.label}</>, disabled: busy }))} />
               </section>

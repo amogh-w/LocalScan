@@ -34,7 +34,7 @@ export default function AppearancePicker() {
       </h2>
 
       <h3 className="sub-head with-icon"><Type /> Text size</h3>
-      <Seg className="wide" label="Text size" value={theme.text} onChange={(text) => setTheme({ text })}
+      <Seg className="seg-fill" label="Text size" value={theme.text} onChange={(text) => setTheme({ text })}
         options={TEXT_SIZES.map((x) => ({ id: x.id, label: x.label }))} />
 
       <h3 id="flavor-label" className="sub-head">Flavor</h3>
@@ -78,7 +78,7 @@ export default function AppearancePicker() {
       </p>
 
       <h3 className="sub-head">Corner radius</h3>
-      <Seg className="wide" label="Corner radius" value={theme.radius} onChange={(radius) => setTheme({ radius })}
+      <Seg className="seg-fill" label="Corner radius" value={theme.radius} onChange={(radius) => setTheme({ radius })}
         options={RADII.map((r) => ({ id: r.id, label: r.label }))} />
       <p className="accent-name">Text size, colors and corners are saved on this device.</p>
     </section>

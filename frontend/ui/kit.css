@@ -175,7 +175,9 @@
 
   /* ---- Segmented control (sliding thumb, positioned by JS) + underline tabs ---- */
   .seg { @apply relative inline-grid auto-cols-fr grid-flow-col rounded-ctl bg-surface0/70 p-0.5; }
-  .seg button { @apply relative z-10 h-8 px-4 text-sm font-semibold text-subtext1 transition-colors aria-pressed:text-text; }
+  .seg button { @apply relative z-10 inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap px-4 text-sm font-semibold text-subtext1 transition-colors aria-pressed:text-text; }
+  .seg button svg { @apply size-4 shrink-0; }
+  .seg-fill { @apply grid self-stretch; } /* full width, equal columns */
   .seg .thumb { @apply absolute inset-y-0.5 left-0 rounded-[calc(var(--r-ctl)-3px)] transition-all duration-300 ease-ios; background: var(--seg-thumb); box-shadow: var(--thumb-shadow, 0 1px 3px rgb(0 0 0 / 0.25)); }
   .seg-accent .thumb { background: var(--accent); }
   .seg-accent button[aria-pressed="true"] { color: var(--ctp-crust); }
