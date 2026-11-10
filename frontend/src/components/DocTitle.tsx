@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 import { api, type Doc } from "../api";
+import { AiRenameButton, AiSuggestion, useAiRename } from "./AiRename";
 import NameEditor from "./NameEditor";
 
 interface Props {
@@ -8,8 +9,10 @@ interface Props {
   onError: (message: string) => void;
 }
 
-/** Document name in the header, editable by hand. AI naming lives in the Options panel (NameOptions). */
+/** Document name in the header: edit it by hand, or click the sparkle to ask the AI (only when clicked). */
 export default function DocTitle({ doc, onChange, onError }: Props) {
+  const ai = useAiRename(doc, onChange, onError);
+
   const rename = async (name: string) => {
     try {
       onChange(await api.renameDoc(doc.id, name));
@@ -27,7 +30,9 @@ export default function DocTitle({ doc, onChange, onError }: Props) {
           </span>
         )}
         <NameEditor value={doc.name} onSave={rename} label="Document name" />
+        <AiRenameButton ai={ai} doc={doc} />
       </div>
+      <AiSuggestion ai={ai} />
     </div>
   );
 }

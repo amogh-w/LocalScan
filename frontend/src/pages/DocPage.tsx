@@ -9,7 +9,6 @@ import ContextMenu, { type MenuItem } from "../components/ContextMenu";
 import { Seg, ask } from "../components/kit";
 import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
-import NameOptions from "../components/NameOptions";
 import PageTools from "../components/PageTools";
 import Organize from "../components/Organize";
 import ProgressCard from "../components/ProgressCard";
@@ -29,7 +28,7 @@ type Tab = "pages" | "page" | "options";
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "pages", label: "Pages", icon: LayoutGrid },
   { id: "page", label: "Page", icon: Crop },
-  { id: "options", label: "Options", icon: SlidersHorizontal },
+  { id: "options", label: "Document", icon: SlidersHorizontal },
 ];
 
 export default function DocPage({ id }: { id: string }) {
@@ -324,18 +323,18 @@ export default function DocPage({ id }: { id: string }) {
 
   const addButtons = (
     <div className="add-grid">
-      <label className={`btn btn-tinted${busy ? " pointer-events-none opacity-40" : ""}`}>
+      <label className={`btn btn-tinted${busy ? " pointer-events-none opacity-40" : ""}`} title="Take a photo">
         <Camera /> Take photo
         <input type="file" accept="image/*" capture="environment" hidden disabled={busy}
           onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
       </label>
-      <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Choose photos">
-        <Images /> Photos
+      <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Choose photos" aria-label="Choose photos">
+        <Images /> <span className="tl">Photos</span>
         <input type="file" accept="image/*" multiple hidden disabled={busy}
           onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
       </label>
-      <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Import PDF">
-        <FileUp /> PDF
+      <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Import PDF" aria-label="Import PDF">
+        <FileUp /> <span className="tl">PDF</span>
         <input type="file" accept="application/pdf" hidden disabled={busy}
           onChange={(e) => (importPdf(e.target.files), (e.target.value = ""))} />
       </label>
@@ -509,7 +508,6 @@ export default function DocPage({ id }: { id: string }) {
         {/* Options: color, crop, other actions, then translate/export */}
         <aside className="panel options-panel">
           <div className="options-panel-grid">
-          <NameOptions doc={doc} onChange={setDoc} onError={setError} />
           <Organize doc={doc} onChange={setDoc} onError={setError} />
           {doc.pages.length > 0 && (
             <TranslatePanel doc={doc} page={page} index={index} tstat={tstat} busy={!!busy} onGoTo={goTo}
