@@ -12,9 +12,9 @@ side**. They open in a new browser tab. Nothing leaves the machine. It runs on W
 
 ## Git
 
-**Never run `git commit`, `git commit --amend` or `git push`.** At most, stage with `git add` and tell the
-user it's ready; they always commit themselves. "Is this safe to commit?" is a request for a review, not
-a commit.
+Commit each finished, logical chunk as you go, with a plain-hyphen message and the attribution trailers. **Never run
+`git push` or `git commit --amend` unless the user asks.** "Is this safe to commit?" is a request for a review, not
+a commit. Commit only your own changes; leave the user's uncommitted edits alone.
 
 ## Writing
 
