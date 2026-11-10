@@ -1,5 +1,7 @@
 """PaddleOCR running inside this process on the GPU. Needs: uv sync --extra paddle"""
 import os
+import subprocess
+import sys
 import threading
 from typing import Any
 
@@ -10,6 +12,29 @@ from .paddle_http import parse_response
 
 _lock = threading.Lock()
 _models: dict[tuple, Any] = {}
+_checked: set[str] = set()
+
+# One 1x1 convolution on the GPU. cuBLAS 12.9 picks its CPU code path from CPUID, so on a PC where Windows has
+# AVX-512 switched off while the CPU still advertises it (seen after a Windows update on a Ryzen 9800X3D), the very
+# first 1x1 convolution kills the whole process with "illegal instruction". Run in a child process, that crash only
+# fails the check instead of taking the server down with it.
+_SMOKE = ("import paddle;paddle.set_device({device!r});"
+          "paddle.nn.Conv2D(16,16,1)(paddle.randn([1,16,128,128]));paddle.device.cuda.synchronize()")  # size matters: 32x32 passes
+NATIVE_CRASH_HELP = (
+    "PaddleOCR crashed the GPU libraries at start-up (illegal instruction in cuBLAS). The usual cause is that Windows "
+    "has AVX-512 turned off while the CPU still reports it. Check the AVX-512 setting in the BIOS, or turn off "
+    "Memory integrity (Windows Security > Device security > Core isolation) and restart, then try again."
+)
+
+
+def check_gpu_libraries(device: str) -> None:
+    """Raise a readable error when the GPU libraries die natively, instead of letting them kill this process."""
+    if not device.startswith("gpu") or device in _checked:
+        return
+    done = subprocess.run([sys.executable, "-c", _SMOKE.format(device=device)], capture_output=True, timeout=180)
+    if done.returncode != 0:
+        raise RuntimeError(f"{NATIVE_CRASH_HELP} (self-test exit code {done.returncode})")
+    _checked.add(device)
 
 
 def _load(lang: str, device: str) -> Any:
@@ -18,6 +43,7 @@ def _load(lang: str, device: str) -> Any:
         if key not in _models:
             # Models already in ~/.paddlex are used as-is; skip the online model-source check.
             os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+            check_gpu_libraries(device)
             from paddleocr import PaddleOCR
 
             kwargs: dict[str, Any] = dict(

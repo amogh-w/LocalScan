@@ -278,6 +278,12 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
 - On Windows the dev servers' file watchers sometimes miss changes: Vite has served stale modules, and
   `uvicorn --reload` has kept old backend code (it served old PDF names after an edit). If a change
   doesn't show up, touch the file or restart the backend before debugging further.
+- **A native crash in PaddleOCR kills the whole server** (no traceback, the port just stops answering; Windows logs
+  an Application Error with the faulting module). Seen: `cublasLt64_12.dll` "illegal instruction" (0xc000001d) on the
+  first 1x1 convolution when Windows has AVX-512 switched off (`IsProcessorFeaturePresent(41)` is false) while the CPU
+  still advertises it, which began after a reboot. No Paddle or cuBLAS setting avoids it; the fix is on the PC (BIOS
+  AVX-512 setting, or Memory integrity off). `paddle_local.check_gpu_libraries` runs that convolution in a child
+  process before loading the models, so the server survives and Settings > Services shows the reason.
 - OCR models load lazily on the first page (about a minute of GPU warm-up), and every backend reload
   unloads them. `/api/health` is slow the first time for the same reason.
 - `paddlex` depends on `opencv-contrib-python`, so that is the cv2 package here as well; never add
