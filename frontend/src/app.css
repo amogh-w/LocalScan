@@ -252,6 +252,8 @@ svg.lucide { flex: none; }
 .tag-add .field { flex: 1; min-width: 0; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .translate-part { display: flex; flex-direction: column; gap: 8px; }
+.opt-head { display: flex; align-items: center; gap: 8px; }
+.translate-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-height: 2rem; }
 .translate-part h4 { font-size: 0.875rem; font-weight: 600; color: var(--ctp-subtext1); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .translate-part h4 .badge { margin-left: auto; }
 .page-dots { display: flex; flex-wrap: wrap; gap: 4px; }
