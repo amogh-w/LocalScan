@@ -84,8 +84,8 @@ The pipeline for each document (`jobs.process`):
 
 ### AI naming
 
-Naming is **manual only**. The user clicks "Suggest name with AI" in the Name group of the Options panel
-(`NameOptions.tsx`) or the sparkle on a Library tile, and `POST /api/docs/<id>/suggest-name`
+Naming is **manual only**. The user clicks sparkle next to the document name in the document header
+(`DocTitle.tsx`, `AiRename.tsx`) or the sparkle on a Library tile, and `POST /api/docs/<id>/suggest-name`
 (`ai/naming.py`) returns `<letter date> <sender> - <subject in English>` as a suggestion to Use or dismiss.
 Never rename documents automatically; the user removed auto-renaming on purpose. `name_source: "ai"` only
 drives the sparkle marker.
@@ -103,7 +103,7 @@ drives the sparkle marker.
 
 ### Sorting a batch into documents (`ai/sort.py`, `ai/pagesignals.py`)
 
-Manual only: "Sort with AI" (split) and "Fix order" (reorder in place) in Options > Page, plus a dismissible
+Manual only: "Sort with AI" (split) and "Fix order" (reorder in place) in the "..." menu of the Pages column, plus a dismissible
 hint on documents with 3+ pages. `POST /api/docs/<id>/sort-pages?split=` only proposes;
 `POST /api/docs/<id>/apply-sort` creates new documents (`storage.create_documents_from_pages`) holding
 COPIES of the pages (new page ids, same blobs, OCR keys and crop; folder and tags inherited), so the original
@@ -176,11 +176,13 @@ for the Library and the document screen).
   when anything is selected). The sparkle and pencil buttons sit over the thumbnail. The footer is the
   three PDF buttons when the document is done, otherwise one next step ("Review & translate", "Add pages",
   "Open to retry"). The status badge shows only while queued, processing or failed.
-- **Document** (`pages/DocPage.tsx`): three panels, Pages (thumbnail grid and adding), Page (crop editor
-  with Crop / Preview / **Translated** tabs and a pager) and Options (Name, Organize, Color, Crop, Page,
-  Translate: "This page" translate and remove, "All pages" translate all (again) and remove all, then the PDFs).
-  A green tick on a thumbnail means that page is fully translated. From 1000px wide
-  all three show; below that they are tabs with a bottom bar. The editor sizes itself from its panel with
+- **Document** (`pages/DocPage.tsx`): three panels split by scope. **Pages** (thumbnail grid, the add row, and a "..." menu with Sort with AI and Fix
+  order). **Page** (the crop editor with Crop / Preview / **Translated** tabs, then `PageTools`: color, detect, full,
+  rotate, move earlier or later, delete page, then the pager): everything that acts on the open page. **Document**
+  (`Organize` folder and tags, then `TranslatePanel`: the one filled Translate button, per-page progress, "Translate
+  this page", a "..." menu for translate again and the removals, then the PDFs): everything that acts on the whole
+  document. The name and its AI sparkle live in the header. A green tick on a thumbnail means that page is fully translated. From 1000px wide
+  all three show; below that they are tabs with a bottom bar (Pages / Page / Document). The editor sizes itself from its panel with
   container query units (`cqw`/`cqh`), not from the window height.
 - **PDF buttons**: `PdfLinks` in `components/common.tsx` is the only place PDFs are offered: Original,
   Translated, Side by side. Each opens inline in a new tab (`/files/<kind>?inline=true`, `target="_blank"`
