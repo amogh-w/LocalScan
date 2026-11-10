@@ -198,13 +198,18 @@ svg.lucide { flex: none; }
 }
 .page-thumb .tick svg { width: 0.8rem; height: 0.8rem; }
 .picked-bar { display: inline-flex; align-items: center; gap: 6px; }
-.page-panel { align-items: center; overflow: hidden; }
+.page-panel { align-items: center; overflow: hidden; container-type: inline-size; }
 .page-panel .seg { align-self: center; flex: none; }
 .stage { container-type: size; flex: 1; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; padding: 20px; } /* room for the corner handles, which stick out of the page */
 .preview {
   width: auto; height: auto; max-width: 100%; max-height: 100cqh; min-width: 0; flex: none;
   object-fit: contain; border-radius: 6px; box-shadow: var(--shadow-1);
 }
+/* Page tools: color and the actions on the open page, under the image */
+.page-tools { flex: none; width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 8px; }
+.tool-icons { display: flex; align-items: center; gap: 6px; }
+.tool-icons .sep { width: 1px; height: 1.25rem; margin-inline: 2px; background: var(--ctp-surface1); }
+@container (max-width: 440px) { .page-tools .tl { display: none; } }
 .pager {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   width: 100%; max-width: 340px; padding: 4px; border-radius: var(--r-ctl); background: var(--ctp-mantle);

@@ -1,26 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, ArrowRight, Camera, ChevronLeft, ChevronRight, Contrast, Crop, Eye, FileUp, Image,
-  Images, Languages, LayoutGrid, ListOrdered, LoaderCircle, Maximize, Palette, RotateCcw, RotateCw, ScanSearch, ScanText,
-  Check, FilePlus, Folder as FolderIcon, RefreshCw, FolderInput, FolderOpen, Inbox, SlidersHorizontal, Sparkles, Split, Trash2, Undo2, X, type LucideIcon,
+  Camera, ChevronLeft, ChevronRight, Ellipsis, Crop, Eye, FileUp, 
+  Images, Languages, LayoutGrid, ListOrdered, LoaderCircle, 
+  Check, FilePlus, Folder as FolderIcon, RefreshCw, FolderInput, FolderOpen, Inbox, SlidersHorizontal, Split, Trash2, Undo2, X, type LucideIcon,
 } from "lucide-react";
-import { api, flattenFolders, imageUrl, prepareImage, previewUrl, translatedUrl, type Doc, type PageTranslation, type Filter, type Folder, type Page, type Point } from "../api";
+import { api, flattenFolders, imageUrl, prepareImage, previewUrl, translatedUrl, type Doc, type PageTranslation, type Folder, type Page, type Point } from "../api";
 import ContextMenu, { type MenuItem } from "../components/ContextMenu";
 import { Seg, ask, tone } from "../components/kit";
 import CornerEditor from "../components/CornerEditor";
 import DocTitle from "../components/DocTitle";
 import NameOptions from "../components/NameOptions";
+import PageTools from "../components/PageTools";
 import Organize from "../components/Organize";
 import ProgressCard from "../components/ProgressCard";
 import SortPages, { type SortResult } from "../components/SortPages";
 import { AsyncButton, PdfLinks, StatusBadge } from "../components/common";
 
-const FILTERS: { id: Filter; label: string; icon: LucideIcon }[] = [
-  { id: "enhanced", label: "Auto", icon: Sparkles },
-  { id: "original", label: "Original", icon: Image },
-  { id: "grayscale", label: "Gray", icon: Contrast },
-  { id: "bw", label: "B&W", icon: ScanText },
-];
 const FULL: Point[] = [
   [0, 0],
   [1, 0],
@@ -50,6 +45,7 @@ export default function DocPage({ id }: { id: string }) {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const anchor = useRef<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
+  const [pagesMenu, setPagesMenu] = useState<{ x: number; y: number } | null>(null); // Sort / Fix order
   const [folders, setFolders] = useState<Folder[] | null>(null);
   const [moved, setMoved] = useState<{ doc: Doc; ids: string[]; positions: number[]; where: string } | null>(null);
   const dragFrom = useRef<number | null>(null);
@@ -378,7 +374,19 @@ export default function DocPage({ id }: { id: string }) {
                 <button className="btn btn-icon btn-sm btn-plain" onClick={clearPicked} aria-label="Clear selection" title="Clear selection (Esc)"><X /></button>
               </span>
             ) : (
-              <span className="muted small">{doc.pages.length}</span>
+              <span className="picked-bar">
+                <span className="muted small">{doc.pages.length}</span>
+                {doc.pages.length >= 2 && (
+                  <button className="btn btn-icon btn-sm btn-plain" disabled={busy} aria-haspopup="menu" aria-label="More page actions"
+                    title="Sort the pages with AI, or fix their order"
+                    onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setPagesMenu({ x: r.left, y: r.bottom + 4 });
+                    }}>
+                    <Ellipsis />
+                  </button>
+                )}
+              </span>
             )}
           </div>
           {addButtons}
@@ -467,6 +475,18 @@ export default function DocPage({ id }: { id: string }) {
                   <img className="preview" src={previewUrl(id, page)} alt="Preview" />
                 )}
               </div>
+              {mode !== "translated" && (
+                <PageTools filter={page.filter} index={index} count={doc.pages.length} busy={!!busy}
+                  onFilter={(filter) => updatePage(page, { filter })}
+                  onDetect={() => run(async () => {
+                    const saved = await api.autodetect(id, page.id);
+                    setDoc((d) => d && { ...d, pages: d.pages.map((q) => (q.id === page.id ? saved : q)) });
+                  })}
+                  onFull={() => updatePage(page, { corners: FULL })}
+                  onRotate={(turns) => updatePage(page, { rotation: (page.rotation + 360 + 90 * turns) % 360 })}
+                  onMove={(to) => move(index, to)}
+                  onDelete={() => removePage(page)} />
+              )}
               <nav className="pager" aria-label="Page navigation">
                 <button className="btn btn-icon btn-sm btn-gray" disabled={index <= 0} onClick={() => goTo(index - 1)}
                   aria-label="Previous page" title="Previous page">
@@ -494,65 +514,6 @@ export default function DocPage({ id }: { id: string }) {
           <div className="options-panel-grid">
           <NameOptions doc={doc} onChange={setDoc} onError={setError} />
           <Organize doc={doc} onChange={setDoc} onError={setError} />
-          {page && (
-            <>
-              <section className="opt-group">
-                <h3 className="with-icon"><Palette /> Color</h3>
-                <Seg label="Color" className="seg-fill" value={page.filter}
-                  onChange={(f) => updatePage(page, { filter: f })}
-                  options={FILTERS.map((f) => ({ id: f.id, label: <><f.icon /> {f.label}</>, disabled: busy }))} />
-              </section>
-
-              <section className="opt-group">
-                <h3 className="with-icon"><Crop /> Crop and page</h3>
-                <div className="tool-grid four">
-                  <AsyncButton disabled={busy} title="Detect the page edges again" icon={<ScanSearch />}
-                    onClick={() => run(async () => {
-                      const saved = await api.autodetect(id, page.id);
-                      setDoc((d) => d && { ...d, pages: d.pages.map((q) => (q.id === page.id ? saved : q)) });
-                    })}>
-                    Detect
-                  </AsyncButton>
-                  <button className="btn btn-gray btn-sm" disabled={busy} title="Use the whole photo"
-                    onClick={() => updatePage(page, { corners: FULL })}>
-                    <Maximize /> Full
-                  </button>
-                  <button className="btn btn-gray btn-sm" disabled={busy} title="Rotate left"
-                    onClick={() => updatePage(page, { rotation: (page.rotation + 270) % 360 })}>
-                    <RotateCcw /> Left
-                  </button>
-                  <button className="btn btn-gray btn-sm" disabled={busy} title="Rotate right"
-                    onClick={() => updatePage(page, { rotation: (page.rotation + 90) % 360 })}>
-                    <RotateCw /> Right
-                  </button>
-                  <button className="btn btn-gray btn-sm" disabled={busy || index === 0} onClick={() => move(index, index - 1)}
-                    title="Move page earlier">
-                    <ArrowLeft /> Earlier
-                  </button>
-                  <button className="btn btn-gray btn-sm" disabled={busy || index === doc.pages.length - 1}
-                    onClick={() => move(index, index + 1)} title="Move page later">
-                    <ArrowRight /> Later
-                  </button>
-                  {doc.pages.length >= 2 && (
-                    <>
-                      <button className="btn btn-gray btn-sm" disabled={busy} onClick={() => setSorting("split")}
-                        title="Find the documents in this scan and put their pages in order">
-                        <Split /> Sort
-                      </button>
-                      <button className="btn btn-gray btn-sm" disabled={busy} onClick={() => setSorting("order")}
-                        title="Keep one document, fix the page order">
-                        <ListOrdered /> Fix order
-                      </button>
-                    </>
-                  )}
-                  <AsyncButton className="btn btn-danger-tinted btn-sm span-2" disabled={busy} onClick={() => removePage(page)} icon={<Trash2 />}>
-                    Delete page
-                  </AsyncButton>
-                </div>
-              </section>
-            </>
-          )}
-
           {doc.pages.length > 0 && (
             <section className="opt-group wide">
               <h3 className="with-icon"><Languages /> Translate</h3>
@@ -632,6 +593,12 @@ export default function DocPage({ id }: { id: string }) {
 
       {sorting && <SortPages doc={doc} split={sorting === "split"} onClose={() => setSorting(null)} onApplied={applied} />}
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.ids)} onClose={() => setMenu(null)} />}
+      {pagesMenu && (
+        <ContextMenu x={pagesMenu.x} y={pagesMenu.y} onClose={() => setPagesMenu(null)} items={[
+          { label: "Sort with AI", icon: <Split />, onSelect: () => setSorting("split") },
+          { label: "Fix order", icon: <ListOrdered />, onSelect: () => setSorting("order") },
+        ]} />
+      )}
       {moved && (
         <div className="toasts"><div className="toast" role="status">
           <span>Moved {moved.ids.length === 1 ? "1 page" : `${moved.ids.length} pages`} to {moved.where === "a new scan" ? "a new scan" : moved.where}.</span>
