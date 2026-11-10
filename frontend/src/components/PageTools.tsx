@@ -25,9 +25,9 @@ interface Props {
 
 /** What acts on the page you are looking at: its color, its crop and rotation, its place in the document, delete. */
 export default function PageTools({ filter, index, count, busy, onFilter, onDetect, onFull, onRotate, onMove, onDelete }: Props) {
-  const icon = (label: string, node: React.ReactNode, onClick: () => void, disabled = false) => (
-    <button className="btn btn-icon btn-sm btn-gray" disabled={busy || disabled} onClick={onClick} aria-label={label} title={label}>
-      {node}
+  const tool = (label: string, text: string, node: React.ReactNode, onClick: () => void, disabled = false) => (
+    <button className="btn btn-sm btn-gray" disabled={busy || disabled} onClick={onClick} aria-label={label} title={label}>
+      {node} {text}
     </button>
   );
   return (
@@ -35,16 +35,19 @@ export default function PageTools({ filter, index, count, busy, onFilter, onDete
       <Seg label="Color" className="seg-fill" value={filter} onChange={onFilter}
         options={FILTERS.map((f) => ({ id: f.id, title: f.label, disabled: busy, label: <><f.icon /><span className="tl">{f.label}</span></> }))} />
       <div className="tool-icons" role="toolbar" aria-label="Page tools">
-        <AsyncButton className="btn btn-icon btn-sm btn-gray" disabled={busy} icon={<ScanSearch />} ariaLabel="Detect the page edges again"
-          title="Detect the page edges again" onClick={onDetect} />
-        {icon("Use the whole photo", <Maximize />, onFull)}
-        {icon("Rotate left", <RotateCcw />, () => onRotate(-1))}
-        {icon("Rotate right", <RotateCw />, () => onRotate(1))}
-        <span className="sep" aria-hidden="true" />
-        {icon("Move page earlier", <ArrowLeft />, () => onMove(index - 1), index === 0)}
-        {icon("Move page later", <ArrowRight />, () => onMove(index + 1), index === count - 1)}
-        <AsyncButton className="btn btn-icon btn-sm btn-danger-tinted ml-auto" disabled={busy} icon={<Trash2 />} ariaLabel="Delete page"
-          title="Delete page" onClick={onDelete} />
+        <AsyncButton className="btn btn-sm btn-gray" disabled={busy} icon={<ScanSearch />} title="Detect the page edges again"
+          onClick={onDetect}>
+          Detect
+        </AsyncButton>
+        {tool("Use the whole photo", "Full", <Maximize />, onFull)}
+        {tool("Rotate left", "Left", <RotateCcw />, () => onRotate(-1))}
+        {tool("Rotate right", "Right", <RotateCw />, () => onRotate(1))}
+        {tool("Move page earlier", "Earlier", <ArrowLeft />, () => onMove(index - 1), index === 0)}
+        {tool("Move page later", "Later", <ArrowRight />, () => onMove(index + 1), index === count - 1)}
+        <AsyncButton className="btn btn-sm btn-danger-tinted ml-auto" disabled={busy} icon={<Trash2 />} title="Delete page"
+          onClick={onDelete}>
+          Delete
+        </AsyncButton>
       </div>
     </div>
   );

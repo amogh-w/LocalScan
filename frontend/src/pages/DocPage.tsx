@@ -329,12 +329,12 @@ export default function DocPage({ id }: { id: string }) {
           onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
       </label>
       <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Choose photos" aria-label="Choose photos">
-        <Images /> <span className="tl">Photos</span>
+        <Images /> Photos
         <input type="file" accept="image/*" multiple hidden disabled={busy}
           onChange={(e) => (addPhotos(e.target.files), (e.target.value = ""))} />
       </label>
       <label className={`btn btn-gray${busy ? " pointer-events-none opacity-40" : ""}`} title="Import PDF" aria-label="Import PDF">
-        <FileUp /> <span className="tl">PDF</span>
+        <FileUp /> PDF
         <input type="file" accept="application/pdf" hidden disabled={busy}
           onChange={(e) => (importPdf(e.target.files), (e.target.value = ""))} />
       </label>
