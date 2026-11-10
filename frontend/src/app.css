@@ -153,9 +153,10 @@ svg.lucide { flex: none; }
 .ce-edge::after { content: ""; position: absolute; inset: -14px; }
 .ce-loupe {
   position: absolute; border-radius: 50%; border: 3px solid var(--accent); box-shadow: var(--shadow-2);
-  background-repeat: no-repeat; pointer-events: none; z-index: 5;
+  overflow: hidden; pointer-events: none; z-index: 5;
 }
-.ce-loupe::before, .ce-loupe::after { content: ""; position: absolute; background: var(--ctp-red); }
+.ce-loupe img { max-width: none; border-radius: 0; }
+.ce-loupe::before, .ce-loupe::after { content: ""; position: absolute; z-index: 1; background: var(--ctp-red); }
 .ce-loupe::before { left: 50%; top: 30%; bottom: 30%; width: 1px; }
 .ce-loupe::after { top: 50%; left: 30%; right: 30%; height: 1px; }
 
@@ -209,7 +210,8 @@ svg.lucide { flex: none; }
 }
 /* Page tools: color and the actions on the open page, under the image */
 .page-tools { flex: none; width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 10px; padding: 6px 4px 8px; }
-.tool-icons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tool-icons { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.25rem, 1fr)); gap: 8px; } /* every tool shares the rows evenly, Delete included */
+.tool-icons .btn { width: 100%; min-width: 0; }
 @container (max-width: 360px) { .page-tools .tl { display: none; } }
 .pager {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;

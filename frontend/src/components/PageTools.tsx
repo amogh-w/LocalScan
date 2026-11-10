@@ -42,9 +42,9 @@ export default function PageTools({ filter, index, count, busy, onFilter, onDete
         {tool("Use the whole photo", "Full", <Maximize />, onFull)}
         {tool("Rotate left", "Left", <RotateCcw />, () => onRotate(-1))}
         {tool("Rotate right", "Right", <RotateCw />, () => onRotate(1))}
-        {tool("Move page earlier", "Earlier", <ArrowLeft />, () => onMove(index - 1), index === 0)}
-        {tool("Move page later", "Later", <ArrowRight />, () => onMove(index + 1), index === count - 1)}
-        <AsyncButton className="btn btn-sm btn-danger-tinted ml-auto" disabled={busy} icon={<Trash2 />} title="Delete page"
+        {tool("Move this page earlier in the document", "Move earlier", <ArrowLeft />, () => onMove(index - 1), index === 0)}
+        {tool("Move this page later in the document", "Move later", <ArrowRight />, () => onMove(index + 1), index === count - 1)}
+        <AsyncButton className="btn btn-sm btn-danger-tinted" disabled={busy} icon={<Trash2 />} title="Delete page"
           onClick={onDelete}>
           Delete
         </AsyncButton>

@@ -438,6 +438,7 @@ export default function DocPage({ id }: { id: string }) {
                     src={imageUrl(id, page.id)}
                     aspect={page.width / page.height}
                     corners={page.corners}
+                    rotation={page.rotation}
                     onCommit={(corners) => !busy && updatePage(page, { corners })}
                   />
                 ) : mode === "translated" ? (
