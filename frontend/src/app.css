@@ -210,8 +210,6 @@ svg.lucide { flex: none; }
 }
 /* Page tools: color and the actions on the open page, under the image */
 .page-tools { flex: none; width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 10px; padding: 6px 4px 8px; }
-.tool-icons { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.25rem, 1fr)); gap: 8px; } /* every tool shares the rows evenly, Delete included */
-.tool-icons .btn { width: 100%; min-width: 0; }
 @container (max-width: 360px) { .page-tools .tl { display: none; } }
 .pager {
   flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;

@@ -126,6 +126,9 @@
   .btn-lg { @apply h-14 px-7 text-[17px]; }
   .btn-icon { @apply size-10 p-0; }
   .btn-block { @apply flex w-full; }
+  /* A toolbar of equal buttons that wraps by itself: as many columns as fit (each at least --btn-min), rows share the width. */
+  .btn-grid { @apply grid gap-2; grid-template-columns: repeat(auto-fit, minmax(var(--btn-min, 7.25rem), 1fr)); }
+  .btn-grid > .btn { @apply w-full min-w-0; }
 
   /* ---- Fields ---- */
   .field {

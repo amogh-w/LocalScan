@@ -34,7 +34,7 @@ export default function PageTools({ filter, index, count, busy, onFilter, onDete
     <div className="page-tools">
       <Seg label="Color" className="seg-fill" value={filter} onChange={onFilter}
         options={FILTERS.map((f) => ({ id: f.id, title: f.label, disabled: busy, label: <><f.icon /><span className="tl">{f.label}</span></> }))} />
-      <div className="tool-icons" role="toolbar" aria-label="Page tools">
+      <div className="btn-grid" role="toolbar" aria-label="Page tools">
         <AsyncButton className="btn btn-sm btn-gray" disabled={busy} icon={<ScanSearch />} title="Detect the page edges again"
           onClick={onDetect}>
           Detect
