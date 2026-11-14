@@ -7,7 +7,7 @@ import Services from "../components/Services";
 import { Select, tone } from "../components/kit";
 
 const OCR_LABELS: Record<string, string> = {
-  rapid: "Built in (CPU, this app)",
+  rapid: "Built in (this app)",
   paddle_local: "Built in (GPU, this app)",
   paddle_http: "PaddleOCR server (HTTP)",
 };

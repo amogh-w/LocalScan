@@ -4,7 +4,10 @@ port = 8010          # 8000 is taken by the PaddleOCR server in Projects/Paddle
 data_dir = "data"
 
 [ocr]
-engine = "rapid"   # "rapid" (PaddleOCR models on the CPU via ONNX, no CUDA), "paddle_local" (GPU, needs: uv sync --extra paddle) or "paddle_http"
+engine = "rapid"   # "rapid" (PaddleOCR models via ONNX, GPU through DirectML, no CUDA), "paddle_local" (GPU, needs: uv sync --extra paddle) or "paddle_http"
+
+[ocr.rapid]
+device = "gpu"       # "gpu" = DirectML (any DirectX 12 GPU, no CUDA), falls back to the CPU; "cpu" forces the CPU
 
 [ocr.paddle_local]
 lang = ""            # empty = PaddleOCR default models (the PP-OCRv6 ones already in ~/.paddlex)

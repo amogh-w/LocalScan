@@ -1,4 +1,4 @@
-"""PaddleOCR's own models (PP-OCRv6) run through ONNX Runtime on the CPU, via RapidOCR.
+"""PaddleOCR's own models (PP-OCRv6) run through ONNX Runtime, via RapidOCR: on the GPU with DirectML, or on the CPU.
 
 No Paddle, no CUDA, no cuBLAS: this is the engine that keeps working when the GPU libraries crash natively (see
 paddle_local.NATIVE_CRASH_HELP). The PP-OCRv6 models are multilingual (German included), so `lang` is not needed.
@@ -14,15 +14,20 @@ from .paddle_http import parse_response
 
 _lock = threading.Lock()
 _model: Any = None
+_device = ""  # what the loaded model runs on, for the status line
 
 
-def _load() -> Any:
-    global _model
+def _load(device: str = "gpu") -> Any:
+    global _model, _device
     with _lock:
         if _model is None:
+            import onnxruntime as ort
             from rapidocr import RapidOCR
 
-            _model = RapidOCR(params={"Global.log_level": "warning", "Global.use_cls": False})
+            dml = device == "gpu" and "DmlExecutionProvider" in ort.get_available_providers()
+            _model = RapidOCR(params={"Global.log_level": "warning", "Global.use_cls": False,
+                                      "EngineConfig.onnxruntime.use_dml": dml})
+            _device = "the GPU (DirectML)" if dml else "the CPU"
         return _model
 
 
@@ -30,8 +35,12 @@ def loaded() -> bool:
     return _model is not None
 
 
-def preload() -> None:
-    _load()
+def device() -> str:
+    return _device
+
+
+def preload(device: str = "gpu") -> None:
+    _load(device)
 
 
 def unload() -> None:
@@ -43,11 +52,12 @@ def unload() -> None:
 class RapidLocalOcr:
     name = "rapid"
 
-    def __init__(self, lang: str = "", **_: Any) -> None:
+    def __init__(self, lang: str = "", device: str = "gpu", **_: Any) -> None:
+        self.device = device  # "gpu" = DirectML when available, else the CPU; "cpu" forces the CPU
         self.lang = lang  # recorded only: the PP-OCRv6 models read every supported language
 
     def ocr(self, img: np.ndarray) -> list[Line]:
-        model = _load()
+        model = _load(self.device)
         with _lock:
             res = model(img)
         if res.boxes is None:
@@ -60,4 +70,4 @@ class RapidLocalOcr:
             import rapidocr  # noqa: F401
         except ImportError:
             return False, "RapidOCR is not installed (run: uv sync)"
-        return True, "in-process on the CPU" + ("" if loaded() else " (models load on first use)")
+        return True, (f"in-process on {_device}" if loaded() else "in-process (models load on first use)")

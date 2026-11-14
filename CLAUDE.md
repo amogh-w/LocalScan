@@ -50,7 +50,8 @@ The pipeline for each document (`jobs.process`):
    apply. "Auto" = shadow removal by dividing by a large max-filter background, then a per-page white
    point measured from the paper.
 2. **OCR** (`ocr/`): an `OcrEngine` protocol with a registry. `rapid` (the default) runs PaddleOCR's PP-OCRv6
-   models on the CPU through ONNX Runtime (RapidOCR; models ship in the wheel, about 2 s per page, no CUDA);
+   models through ONNX Runtime (RapidOCR; models ship in the wheel) on the GPU with DirectML (`onnxruntime-directml`,
+   about 0.2 s per page; no CUDA, since the CUDA provider crashes in cuBLAS too), or the CPU (about 2 s);
    `paddle_local` runs PaddleOCR in-process on the GPU; `paddle_http` calls a server (multipart, PaddleX or PaddleHub formats). Digital PDF
    imports use their own text layer (`pdf_text.py`) and skip OCR.
 3. **Blocks** (`ocr/blocks.py`): lines are grouped into blocks. A block either *flows* (prose, reflowed)
@@ -285,7 +286,7 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
   still advertises it, which began after a reboot. No Paddle or cuBLAS setting avoids it; the fix is on the PC (BIOS
   AVX-512 setting, or Memory integrity off). `paddle_local.check_gpu_libraries` runs that convolution in a child
   process before loading the models, so the server survives and Settings > Services shows the reason. This is why
-  the default engine is `rapid` (CPU, no cuBLAS).
+  the default engine is `rapid` (DirectML, no cuBLAS).
 - OCR models load lazily on the first page (about a minute of GPU warm-up), and every backend reload
   unloads them. `/api/health` is slow the first time for the same reason.
 - `paddlex` depends on `opencv-contrib-python`, so that is the cv2 package here as well; never add

@@ -241,13 +241,13 @@ _paddle_local = LocalPaddle()
 class LocalRapid(LocalPaddle):
     """PaddleOCR's models on the CPU through ONNX Runtime (rapid_local): running means they are loaded."""
 
-    id, name = "paddle", "PaddleOCR (in this app, CPU)"
+    id, name = "paddle", "PaddleOCR (in this app)"
 
     def status(self) -> dict:
         if self._thread and self._thread.is_alive():
             return {"state": "starting", "detail": "loading the models"}
         if rapid_local.loaded():
-            return {"state": "running", "detail": "models loaded on the CPU"}
+            return {"state": "running", "detail": f"models loaded on {rapid_local.device()}"}
         return {"state": "stopped", "detail": self._error or "models load on the first page, or when you click Start"}
 
     def start(self) -> None:
@@ -257,7 +257,7 @@ class LocalRapid(LocalPaddle):
 
         def load() -> None:
             try:
-                rapid_local.preload()
+                rapid_local.preload(settings.section("ocr", "rapid").get("device", "gpu"))
             except Exception as e:  # noqa: BLE001 - shown in the UI
                 self._error = f"loading failed: {e}"
 

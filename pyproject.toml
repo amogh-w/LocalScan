@@ -15,8 +15,10 @@ dependencies = [
     "qrcode>=8.0",
     "psutil>=6.0",  # find and stop the helper services (services.py)
     "pystray>=0.19",  # the system-tray icon (scripts/tray.py)
-    "rapidocr>=3.10",  # PaddleOCR models on ONNX Runtime, CPU (ocr.engine = "rapid"); no CUDA, so no cuBLAS crash
-    "onnxruntime>=1.20",
+    "rapidocr>=3.10",  # PaddleOCR models on ONNX Runtime (ocr.engine = "rapid")
+    # DirectML build: runs on the GPU through DirectX 12, without CUDA or cuBLAS (the CUDA build crashes the same way
+    # Paddle does here). It also has the CPU provider. Never install plain onnxruntime next to it.
+    "onnxruntime-directml>=1.24",
 ]
 
 [project.optional-dependencies]
