@@ -49,8 +49,9 @@ The pipeline for each document (`jobs.process`):
    assumed, because straight-on photos make the estimate blow up and squeeze the page. Then the filters
    apply. "Auto" = shadow removal by dividing by a large max-filter background, then a per-page white
    point measured from the paper.
-2. **OCR** (`ocr/`): an `OcrEngine` protocol with a registry. `paddle_local` runs PaddleOCR in-process
-   (the default); `paddle_http` calls a server (multipart, PaddleX or PaddleHub formats). Digital PDF
+2. **OCR** (`ocr/`): an `OcrEngine` protocol with a registry. `rapid` (the default) runs PaddleOCR's PP-OCRv6
+   models on the CPU through ONNX Runtime (RapidOCR; models ship in the wheel, about 2 s per page, no CUDA);
+   `paddle_local` runs PaddleOCR in-process on the GPU; `paddle_http` calls a server (multipart, PaddleX or PaddleHub formats). Digital PDF
    imports use their own text layer (`pdf_text.py`) and skip OCR.
 3. **Blocks** (`ocr/blocks.py`): lines are grouped into blocks. A block either *flows* (prose, reflowed)
    or keeps its lines (addresses, sidebars, tables, lists), in which case its text holds `\n` and each
@@ -283,11 +284,13 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
   first 1x1 convolution when Windows has AVX-512 switched off (`IsProcessorFeaturePresent(41)` is false) while the CPU
   still advertises it, which began after a reboot. No Paddle or cuBLAS setting avoids it; the fix is on the PC (BIOS
   AVX-512 setting, or Memory integrity off). `paddle_local.check_gpu_libraries` runs that convolution in a child
-  process before loading the models, so the server survives and Settings > Services shows the reason.
+  process before loading the models, so the server survives and Settings > Services shows the reason. This is why
+  the default engine is `rapid` (CPU, no cuBLAS).
 - OCR models load lazily on the first page (about a minute of GPU warm-up), and every backend reload
   unloads them. `/api/health` is slow the first time for the same reason.
 - `paddlex` depends on `opencv-contrib-python`, so that is the cv2 package here as well; never add
-  `opencv-python(-headless)` alongside it.
+  `opencv-python(-headless)` alongside it. `rapidocr` asks for the headless one, so `tool.uv.override-dependencies`
+  drops it.
 - **Tests use synthetic letters only** ("Max Mustermann", "Musterstadt"). Never copy names, addresses,
   amounts or reference numbers from the user's real documents into tests or fixtures.
 - External services: Ollama on `localhost:11434`. The model is picked in Settings; empty means the

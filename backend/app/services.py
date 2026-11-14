@@ -2,8 +2,8 @@
 
 Nothing here runs by itself: a service starts only when the user clicks Start. Ollama and the separate PaddleOCR
 server (engine "paddle_http") are programs on this PC that we launch hidden, with their output in data/logs/<id>.log.
-With the in-process engine ("paddle_local") the "service" is the loaded models: Start loads them onto the GPU now
-(otherwise they load on the first page), Stop frees the GPU memory.
+With an in-process engine ("rapid" on the CPU, "paddle_local" on the GPU) the "service" is the loaded models: Start loads
+them now (otherwise they load on the first page), Stop frees their memory.
 """
 import os
 import shutil
@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 import psutil
 
 from .config import settings
-from .ocr import paddle_local
+from .ocr import paddle_local, rapid_local
 
 LOG_DIR = settings.data_dir / "logs"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -238,9 +238,44 @@ _paddle_http = ProcessService("paddle", "PaddleOCR server", _paddle_http_command
 _paddle_local = LocalPaddle()
 
 
+class LocalRapid(LocalPaddle):
+    """PaddleOCR's models on the CPU through ONNX Runtime (rapid_local): running means they are loaded."""
+
+    id, name = "paddle", "PaddleOCR (in this app, CPU)"
+
+    def status(self) -> dict:
+        if self._thread and self._thread.is_alive():
+            return {"state": "starting", "detail": "loading the models"}
+        if rapid_local.loaded():
+            return {"state": "running", "detail": "models loaded on the CPU"}
+        return {"state": "stopped", "detail": self._error or "models load on the first page, or when you click Start"}
+
+    def start(self) -> None:
+        if (self._thread and self._thread.is_alive()) or rapid_local.loaded():
+            return
+        self._error = ""
+
+        def load() -> None:
+            try:
+                rapid_local.preload()
+            except Exception as e:  # noqa: BLE001 - shown in the UI
+                self._error = f"loading failed: {e}"
+
+        self._thread = threading.Thread(target=load, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        rapid_local.unload()
+        self._error = ""
+
+
+_rapid_local = LocalRapid()
+
+
 def paddle() -> Service:
     """The PaddleOCR service for the engine chosen in Settings."""
-    return _paddle_http if settings.values["ocr"]["engine"] == "paddle_http" else _paddle_local
+    engine = settings.values["ocr"].get("engine", "rapid")
+    return {"paddle_http": _paddle_http, "paddle_local": _paddle_local}.get(engine, _rapid_local)
 
 
 def listing() -> list[Service]:

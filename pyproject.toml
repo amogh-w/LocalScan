@@ -15,6 +15,8 @@ dependencies = [
     "qrcode>=8.0",
     "psutil>=6.0",  # find and stop the helper services (services.py)
     "pystray>=0.19",  # the system-tray icon (scripts/tray.py)
+    "rapidocr>=3.10",  # PaddleOCR models on ONNX Runtime, CPU (ocr.engine = "rapid"); no CUDA, so no cuBLAS crash
+    "onnxruntime>=1.20",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +43,9 @@ dev = ["pytest>=8.0"]
 
 [tool.uv]
 package = false
+# rapidocr asks for opencv-python-headless; opencv-contrib-python (needed by paddlex) already provides cv2, and two
+# cv2 packages in one venv break each other.
+override-dependencies = ["opencv-python-headless; sys_platform == 'never'"]
 environments = ["sys_platform == 'win32'"]  # runs on the Windows PC with the GPU
 
 [[tool.uv.index]]
