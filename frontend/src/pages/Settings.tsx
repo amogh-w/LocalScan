@@ -7,8 +7,8 @@ import Services from "../components/Services";
 import { Select, tone } from "../components/kit";
 
 const OCR_LABELS: Record<string, string> = {
-  rapid: "Built in (this app)",
-  paddle_local: "Built in (GPU, this app)",
+  rapid: "RapidOCR (GPU via DirectML, recommended)",
+  paddle_local: "PaddleOCR (GPU via CUDA)",
   paddle_http: "PaddleOCR server (HTTP)",
 };
 
@@ -134,6 +134,9 @@ export default function SettingsPage() {
                     Request format is set in <code>config.toml</code> (<code>ocr.paddle_http.request</code>).
                   </p>
                 </>
+              )}
+              {s.ocr === "rapid" && (
+                <p className="muted small">PaddleOCR's models run inside the app on the GPU through DirectML (no CUDA), or on the CPU if no GPU is usable.</p>
               )}
               {s.ocr === "paddle_local" && (
                 <p className="muted small">Runs on this PC's GPU inside the app. The first page takes a few extra seconds while models load.</p>

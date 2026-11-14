@@ -241,7 +241,7 @@ _paddle_local = LocalPaddle()
 class LocalRapid(LocalPaddle):
     """PaddleOCR's models on the CPU through ONNX Runtime (rapid_local): running means they are loaded."""
 
-    id, name = "paddle", "PaddleOCR (in this app)"
+    id, name = "paddle", "RapidOCR (in this app)"
 
     def status(self) -> dict:
         if self._thread and self._thread.is_alive():

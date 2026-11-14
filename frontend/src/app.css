@@ -187,7 +187,7 @@ svg.lucide { flex: none; }
   border: 2px solid transparent; border-radius: var(--r-ctl); background: var(--ctp-surface0);
 }
 .page-thumb:hover { border-color: var(--ctp-surface1); }
-.page-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.page-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; } /* a sideways page shows whole */
 .page-thumb.selected, .page-thumb.picked { border-color: var(--accent); }
 .page-thumb .num {
   position: absolute; left: 5px; bottom: 5px; font-size: 0.6875rem; font-weight: 700;

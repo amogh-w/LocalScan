@@ -216,8 +216,10 @@ export const imageUrl = (id: string, pid: string, max = 1600) => `${d(id)}/pages
 export const translatedUrl = (id: string, pid: string, v: number | string, max = 1200) =>
   `${d(id)}/pages/${pid}/translated?max=${max}&v=${v}`;
 
+// `r` changes the URLs once so browsers drop thumbnails cached while the server drew the stored page instead of `v`
+// (they showed an old rotation). Bump it only if previews ever have to be invalidated in every browser again.
 export const previewUrl = (id: string, p: Page, max = 1200) =>
-  `${d(id)}/pages/${p.id}/preview?max=${max}&v=${encodeURIComponent(
+  `${d(id)}/pages/${p.id}/preview?max=${max}&r=2&v=${encodeURIComponent(
     JSON.stringify([p.corners, p.rotation, p.filter]),
   )}`;
 

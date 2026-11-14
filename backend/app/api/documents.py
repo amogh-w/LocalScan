@@ -381,7 +381,9 @@ def page_preview(doc_id: str, page_id: str, size: int = Query(1200, ge=100, le=3
         return encode_jpeg(process_page(img, corners, rotation, filt, max_long_edge=size), 82)
 
     key = json.dumps(["pv", jobs.SCAN_VERSION, page["original"], corners, rotation, filt, size])
-    return _cached_jpeg(key, page_id, render)
+    # With a valid v the URL names exactly what is drawn, so the browser may keep it; without one it is the stored page.
+    cache = "private, max-age=31536000, immutable" if v and _preview_state(v) else "no-cache"
+    return _cached_jpeg(key, page_id, render, {"Cache-Control": cache})
 
 
 @router.post("/{doc_id}/pages/{page_id}/autodetect")

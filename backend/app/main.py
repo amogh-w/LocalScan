@@ -33,9 +33,13 @@ app.include_router(services_api.router)
 if DIST.exists():
     app.mount("/assets", StaticFiles(directory=DIST / "assets"), name="assets")
 
+    # Files outside /assets keep their names across builds (index.html, theme.js, ui.js), so the browser must check
+    # them every time; without this it kept an old index.html, ran the previous build and ignored a rebuild.
+    FRESH = {"Cache-Control": "no-cache"}
+
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str):
         f = DIST / path
         if path and f.is_file() and DIST in f.resolve().parents:
-            return FileResponse(f)
-        return FileResponse(DIST / "index.html")
+            return FileResponse(f, headers=FRESH)
+        return FileResponse(DIST / "index.html", headers=FRESH)
