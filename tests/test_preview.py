@@ -39,7 +39,13 @@ def test_preview_follows_the_url_not_the_stored_page(page):
     assert h > w and shape(turned) == (w, h)
 
 
-@pytest.mark.parametrize("v", ["", "nonsense", json.dumps([FULL, 45, "original"]), json.dumps([FULL, 0, "sepia"]),
+def test_only_a_preview_that_names_its_state_is_cached_for_good(page):
+    named = documents.page_preview(page, "p0", size=300, v=json.dumps([FULL, 90, "original"]))
+    stored = documents.page_preview(page, "p0", size=300, v="")
+    assert "immutable" in named.headers["cache-control"] and stored.headers["cache-control"] == "no-cache"
+
+
+@pytest.mark.parametrize("v",["", "nonsense", json.dumps([FULL, 45, "original"]), json.dumps([FULL, 0, "sepia"]),
                                json.dumps([[[0, 0]], 0, "original"])])
 def test_a_missing_or_bad_v_falls_back_to_the_stored_page(page, v):
     assert documents._preview_state(v) is None
