@@ -354,16 +354,33 @@ def page_image(doc_id: str, page_id: str, size: int = Query(1600, ge=100, le=400
     return _cached_jpeg(f"img|{page['original']}|{size}", page_id, render, {"Cache-Control": "max-age=86400"})
 
 
+def _preview_state(v: str) -> tuple[list, int, str] | None:
+    """Parse and validate a preview's `v` ([corners, rotation, filter]); None when it is missing or malformed."""
+    try:
+        corners, rotation, filt = json.loads(v)
+        ok = (isinstance(rotation, int) and rotation % 90 == 0 and filt in FILTERS and len(corners) == 4
+              and all(len(c) == 2 and all(isinstance(n, (int, float)) for n in c) for c in corners))
+    except (ValueError, TypeError):
+        return None
+    return (corners, rotation, filt) if ok else None
+
+
 @router.get("/{doc_id}/pages/{page_id}/preview")
-def page_preview(doc_id: str, page_id: str, size: int = Query(1200, ge=100, le=3000, alias="max")):
-    """The page as it will appear in the PDF (dewarped, rotated, filtered)."""
+def page_preview(doc_id: str, page_id: str, size: int = Query(1200, ge=100, le=3000, alias="max"), v: str = ""):
+    """The page as it will appear in the PDF (dewarped, rotated, filtered).
+
+    `v` is the client's [corners, rotation, filter]. When it is valid the preview renders exactly that, not the stored
+    page: the browser caches the image under its URL, and the client changes the URL before its save is stored, so
+    rendering the stored page made the thumbnail lag one edit behind (rotate twice, see the first rotation).
+    """
     page = _page(_doc(doc_id), page_id)
+    corners, rotation, filt = _preview_state(v) or (page["corners"], page["rotation"], page["filter"])
 
     def render() -> bytes:
         img = read_image(blobs.path(page["original"]))
-        return encode_jpeg(process_page(img, page["corners"], page["rotation"], page["filter"], max_long_edge=size), 82)
+        return encode_jpeg(process_page(img, corners, rotation, filt, max_long_edge=size), 82)
 
-    key = json.dumps(["pv", jobs.SCAN_VERSION, page["original"], page["corners"], page["rotation"], page["filter"], size])
+    key = json.dumps(["pv", jobs.SCAN_VERSION, page["original"], corners, rotation, filt, size])
     return _cached_jpeg(key, page_id, render)
 
 
