@@ -286,7 +286,9 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
   (cuBLAS 12.6.4.1, cuDNN 9.5.1) pinned in `paddle_ocr/pyproject.toml`. cuBLAS 12.9 picks AVX-512 code from CPUID and
   dies with "illegal instruction" (0xc000001d) while Windows hides AVX-512 (`IsProcessorFeaturePresent(41)` false:
   the hypervisor is on for Docker/WSL2 and VBS), taking the process down with no traceback. The ONNX CUDA provider and
-  Ollama's AVX-512 CPU backend die the same way, which is why `rapid` uses DirectML. An old `engine = "paddle_local"`
+  Ollama's AVX-512 CPU backend die the same way, which is why `rapid` uses DirectML. For Ollama,
+  `scripts/ollama_avx512.ps1` renames its AVX-512 `ggml-cpu-*` builds in the install (re-run after an Ollama update,
+  `-Undo` restores them); it then runs on the AVX2 build and CUDA 13. An old `engine = "paddle_local"`
   setting falls back to `rapid`.
 - OCR models load lazily on the first page (under a second on DirectML), and every backend restart unloads them.
 - cv2 is `opencv-python-headless` only. Never add a second OpenCV package (contrib, non-headless): they install into
