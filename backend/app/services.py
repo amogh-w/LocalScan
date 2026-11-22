@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 
 import psutil
 
-from .config import settings
+from .config import ROOT, settings
 from .ocr import rapid_local
 
 LOG_DIR = settings.data_dir / "logs"
@@ -212,16 +212,22 @@ def _ollama_port() -> int:
 
 def _paddle_http_command() -> list[str]:
     cfg = settings.section("services", "paddle_server")
-    python = Path(cfg.get("python", "")).expanduser()
+    python = _path(cfg.get("python", ""))
     if not python.is_file():
-        raise ServiceError("Set services.paddle_server.python and cwd in config.toml to start the OCR server.")
+        raise ServiceError(f"PaddleOCR is not installed ({python} is missing). Run: cd paddle_ocr; uv sync")
     port = _local_url(settings.section("ocr", "paddle_http")["url"], "The OCR server URL")
     return [str(python), "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", str(port)]
 
 
 def _paddle_http_cwd() -> str | None:
     cwd = settings.section("services", "paddle_server").get("cwd")
-    return str(Path(cwd).expanduser()) if cwd else None
+    return str(_path(cwd)) if cwd else None
+
+
+def _path(p: str) -> Path:
+    """A path from config.toml: ~ expands, and a relative path is relative to the repo (paddle_ocr/...)."""
+    path = Path(p).expanduser()
+    return path if path.is_absolute() else ROOT / path
 
 
 def _paddle_http_port() -> int:

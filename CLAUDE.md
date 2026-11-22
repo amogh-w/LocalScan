@@ -54,7 +54,8 @@ The pipeline for each document (`jobs.process`):
 2. **OCR** (`ocr/`): an `OcrEngine` protocol with a registry. `rapid` (the default) runs PaddleOCR's PP-OCRv6
    models through ONNX Runtime (RapidOCR; models ship in the wheel) on the GPU with DirectML (`onnxruntime-directml`,
    about 0.2 s per page; no CUDA, since the CUDA provider crashes in cuBLAS too), or the CPU (about 2 s);
-   `paddle_http` calls a server (multipart, PaddleX or PaddleHub formats). Digital PDF
+   `paddle_http` calls a server (multipart, PaddleX or PaddleHub formats); by default that is PaddleOCR on the GPU in
+   `paddle_ocr/` (its own uv project and venv, `server.py` on :8020), started from Settings > Services. Digital PDF
    imports use their own text layer (`pdf_text.py`) and skip OCR.
 3. **Blocks** (`ocr/blocks.py`): lines are grouped into blocks. A block either *flows* (prose, reflowed)
    or keeps its lines (addresses, sidebars, tables, lists), in which case its text holds `\n` and each
@@ -279,11 +280,13 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
 - On Windows the dev servers' file watchers sometimes miss changes: Vite has served stale modules, and
   `uvicorn --reload` has kept old backend code (it served old PDF names after an edit). If a change
   doesn't show up, touch the file or restart the backend before debugging further.
-- **No Paddle, no CUDA in this app.** With Memory integrity on, Windows hides AVX-512 (`IsProcessorFeaturePresent(41)`
-  is false) while the CPU still advertises it, and CUDA's cuBLAS (Paddle, the ONNX CUDA provider) and Ollama's
-  AVX-512 CPU backend then die with "illegal instruction" (0xc000001d), taking the process down with no traceback.
-  So OCR is RapidOCR on DirectML. The Paddle implementation (`paddle_local`, the `paddle` extra) was removed; an old
-  `engine = "paddle_local"` setting falls back to `rapid`.
+- **Paddle lives in `paddle_ocr/`, never in the app's venv** (its OpenCV and CUDA wheels broke the app's once). Paddle
+  must be the cu129 build (RTX 5080, sm_120: cu126 returns garbage text), but with the **CUDA 12.6 runtime wheels**
+  (cuBLAS 12.6.4.1, cuDNN 9.5.1) pinned in `paddle_ocr/pyproject.toml`. cuBLAS 12.9 picks AVX-512 code from CPUID and
+  dies with "illegal instruction" (0xc000001d) while Windows hides AVX-512 (`IsProcessorFeaturePresent(41)` false:
+  the hypervisor is on for Docker/WSL2 and VBS), taking the process down with no traceback. The ONNX CUDA provider and
+  Ollama's AVX-512 CPU backend die the same way, which is why `rapid` uses DirectML. An old `engine = "paddle_local"`
+  setting falls back to `rapid`.
 - OCR models load lazily on the first page (under a second on DirectML), and every backend restart unloads them.
 - cv2 is `opencv-python-headless` only. Never add a second OpenCV package (contrib, non-headless): they install into
   the same `cv2` folder and break each other.

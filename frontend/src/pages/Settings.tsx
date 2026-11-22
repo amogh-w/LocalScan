@@ -8,7 +8,7 @@ import { Select, tone } from "../components/kit";
 
 const OCR_LABELS: Record<string, string> = {
   rapid: "Built in (GPU via DirectML)",
-  paddle_http: "OCR server (HTTP)",
+  paddle_http: "PaddleOCR (GPU, separate process)",
 };
 
 export default function SettingsPage() {

@@ -74,7 +74,9 @@ never need another window. Nothing starts by itself; a service runs only after y
 
 OCR engines:
 - `rapid` (default): PaddleOCR's models inside this app via RapidOCR, on the GPU (DirectML) or the CPU (`ocr.rapid.device`)
-- `paddle_http`: an OCR server. `ocr.paddle_http.request` selects the format: `multipart` (the
+- `paddle_http`: PaddleOCR on the GPU in its own process. Install it once with `cd paddle_ocr; uv sync`, pick
+  "PaddleOCR" in Settings and click Start under Services (it serves `paddle_ocr/server.py` on port 8020). It can
+  also be any other OCR server. `ocr.paddle_http.request` selects the format: `multipart` (the
   `Projects/Paddle` server), `paddlex` (PaddleX serving) or `paddlehub` (PaddleHub serving). To start it from
   Settings, set `services.paddle_server` (`python` and `cwd`) in `config.toml`.
 

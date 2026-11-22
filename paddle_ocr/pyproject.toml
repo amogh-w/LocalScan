@@ -1,0 +1,36 @@
+[project]
+name = "local-scan-paddle-ocr"
+version = "0.1.0"
+description = "PaddleOCR on the GPU as a small HTTP server, kept in its own venv (Local Scan's ocr.engine = \"paddle\")"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.12",
+    "paddleocr==3.7.0",
+    "paddlepaddle-gpu==3.3.1",
+    # The CUDA runtime DLLs. Paddle's Windows wheel doesn't declare them, so they are listed here. Paddle itself must be
+    # the cu129 build for RTX 50xx (Blackwell, sm_120; the cu126 build returns garbage text), but the libraries are the
+    # CUDA 12.6 ones: cuBLAS 12.9 picks AVX-512 code from CPUID and dies with "illegal instruction" while Windows hides
+    # AVX-512 (hypervisor / VBS on). This set is the one that works in ~/miniconda3/envs/paddleocr.
+    "nvidia-cublas-cu12==12.6.4.1",
+    "nvidia-cuda-runtime-cu12==12.6.77",
+    "nvidia-cudnn-cu12==9.5.1.17",
+    "nvidia-cufft-cu12==11.3.0.4",
+    "nvidia-curand-cu12==10.3.7.77",
+    "nvidia-cusolver-cu12==11.7.1.2",
+    "nvidia-cusparse-cu12==12.5.4.2",
+    "nvidia-nvjitlink-cu12==12.9.86",
+]
+
+[tool.uv]
+package = false
+environments = ["sys_platform == 'win32'"]
+
+[[tool.uv.index]]
+name = "paddle-cu129"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cu129/"
+explicit = true
+
+[tool.uv.sources]
+paddlepaddle-gpu = { index = "paddle-cu129" }

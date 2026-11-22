@@ -4,15 +4,16 @@ port = 8010          # 8000 is taken by the PaddleOCR server in Projects/Paddle
 data_dir = "data"
 
 [ocr]
-engine = "rapid"   # "rapid" (built in: PaddleOCR's models via ONNX, GPU through DirectML, no CUDA) or "paddle_http" (an OCR server)
+engine = "rapid"   # "rapid" (built in: PaddleOCR's models via ONNX, GPU through DirectML, no CUDA) or "paddle_http"
+                   # (PaddleOCR on the GPU in its own process: paddle_ocr/, started from Settings > Services)
 
 [ocr.rapid]
 device = "gpu"       # "gpu" = DirectML (any DirectX 12 GPU, no CUDA), falls back to the CPU; "cpu" forces the CPU
 
 [ocr.paddle_http]
-url = "http://localhost:8000/ocr"
+url = "http://localhost:8020/ocr"  # paddle_ocr/server.py (8000 is Projects/Paddle's)
 # How to send the image:
-#   "multipart" - form field "file" (Projects/Paddle server.py)
+#   "multipart" - form field "file" (paddle_ocr/server.py, Projects/Paddle server.py)
 #   "paddlex"   - PaddleX serving, JSON {"file": <b64>, "fileType": 1}
 #   "paddlehub" - PaddleHub serving, JSON {"images": [<b64>]}
 request = "multipart"
@@ -46,6 +47,6 @@ quality = 88
 [services.ollama]
 command = "ollama"   # found on PATH, or in %LOCALAPPDATA%\Programs\Ollama
 
-[services.paddle_server]   # your separate PaddleOCR server, used only when ocr.engine = "paddle_http"
-python = "~/miniconda3/envs/paddleocr/python.exe"
-cwd = "~/Projects/Paddle"
+[services.paddle_server]   # the PaddleOCR server, used only when ocr.engine = "paddle_http" (install: cd paddle_ocr; uv sync)
+python = "paddle_ocr/.venv/Scripts/python.exe"   # relative paths are relative to this folder
+cwd = "paddle_ocr"
