@@ -25,18 +25,13 @@ run.bat
 This starts the server hidden and puts an icon in the system tray (open the app, copy the phone link, start with
 Windows, open the log folder, restart, exit). Open `http://localhost:8010` on the PC, or the phone link from the
 tray menu (same Wi-Fi). `run.bat -Console` runs the server in the window instead and prints the link and a QR code.
+`run.bat -Restart` restarts the server hidden in about a second (handy after a change), `run.bat -Stop` stops it.
 
-Needs `uv`, Node and Ollama. The first run installs everything, including PaddleOCR GPU
-(`uv sync --extra paddle`). The first page after a start takes about a minute while the OCR models warm up on the
-GPU; after that a page takes well under a second.
+Needs `uv`, Node and Ollama. The first run installs everything (`uv sync`); later starts install only when
+`pyproject.toml` or `uv.lock` changed. OCR is PaddleOCR's PP-OCRv6 models on ONNX Runtime (RapidOCR), on the GPU
+through DirectML: no CUDA, and the models ship with the package. They load in under a second on the first page.
 
 Port 8010 is used because `Projects/Paddle/start_server.bat` takes 8000 and kills anything else on it.
-
-### GPU note (RTX 50xx)
-
-Paddle must be the **CUDA 12.9** build (`paddle-cu129` index in `pyproject.toml`). The cu126 build loads on a
-Blackwell card but returns garbage text. Paddle's Windows wheel doesn't declare its CUDA DLL packages, so the
-`paddle` extra lists the `nvidia-*-cu12` wheels explicitly.
 
 ## Using it
 
@@ -78,7 +73,7 @@ never need another window. Nothing starts by itself; a service runs only after y
 `config.toml` holds the defaults. Changes made on the Settings page are stored in `data/settings.json`.
 
 OCR engines:
-- `paddle_local` (default): PaddleOCR inside this app on the GPU, using the models in `~/.paddlex`
+- `rapid` (default): PaddleOCR's models inside this app via RapidOCR, on the GPU (DirectML) or the CPU (`ocr.rapid.device`)
 - `paddle_http`: an OCR server. `ocr.paddle_http.request` selects the format: `multipart` (the
   `Projects/Paddle` server), `paddlex` (PaddleX serving) or `paddlehub` (PaddleHub serving). To start it from
   Settings, set `services.paddle_server` (`python` and `cwd`) in `config.toml`.
@@ -88,7 +83,7 @@ OCR engines:
 ```
 backend/app/
   scan/       corner detection, perspective correction (with real aspect ratio recovery), filters
-  ocr/        OcrEngine protocol, PaddleOCR local and HTTP, line -> paragraph grouping, PDF text layer import
+  ocr/        OcrEngine protocol, RapidOCR (built in) and an HTTP server, line -> paragraph grouping, PDF text layer import
   translate/  Translator protocol, Ollama implementation
   render/     text erasing and the three PDFs (PyMuPDF)
   ai/         naming, page sorting
@@ -114,6 +109,6 @@ To retake the screenshots, run a second instance on its own data and fill it wit
 
 ```powershell
 $env:LOCALSCAN_DATA_DIR = "$env:TEMP\localscan-demo"
-uv run --extra paddle --directory backend uvicorn app.main:app --port 8011
+.venv\Scripts\python -m uvicorn app.main:app --app-dir backend --port 8011
 uv run python scripts/demo_library.py http://localhost:8011
 ```

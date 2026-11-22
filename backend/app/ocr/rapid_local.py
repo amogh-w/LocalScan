@@ -1,7 +1,7 @@
 """PaddleOCR's own models (PP-OCRv6) run through ONNX Runtime, via RapidOCR: on the GPU with DirectML, or on the CPU.
 
-No Paddle, no CUDA, no cuBLAS: this is the engine that keeps working when the GPU libraries crash natively (see
-paddle_local.NATIVE_CRASH_HELP). The PP-OCRv6 models are multilingual (German included), so `lang` is not needed.
+No Paddle, no CUDA, no cuBLAS: CUDA's cuBLAS crashes natively on this PC while Windows has AVX-512 switched off
+(Memory integrity on), and it took the whole server down with it. DirectML goes through DirectX 12 instead. The PP-OCRv6 models are multilingual (German included), so `lang` is not needed.
 The model files ship inside the rapidocr wheel, so nothing is downloaded.
 """
 import threading

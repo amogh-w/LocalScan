@@ -1,9 +1,9 @@
-"""Start, stop and watch the helper services (Ollama, PaddleOCR) from the Settings page.
+"""Start, stop and watch the helper services (Ollama, OCR) from the Settings page.
 
-Nothing here runs by itself: a service starts only when the user clicks Start. Ollama and the separate PaddleOCR
-server (engine "paddle_http") are programs on this PC that we launch hidden, with their output in data/logs/<id>.log.
-With an in-process engine ("rapid" on the CPU, "paddle_local" on the GPU) the "service" is the loaded models: Start loads
-them now (otherwise they load on the first page), Stop frees their memory.
+Nothing here runs by itself: a service starts only when the user clicks Start. Ollama and the separate OCR server
+(engine "paddle_http") are programs on this PC that we launch hidden, with their output in data/logs/<id>.log. With the
+built-in engine ("rapid") the "service" is the loaded models: Start loads them now (otherwise they load on the first
+page), Stop frees their memory.
 """
 import os
 import shutil
@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 import psutil
 
 from .config import settings
-from .ocr import paddle_local, rapid_local
+from .ocr import rapid_local
 
 LOG_DIR = settings.data_dir / "logs"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -148,34 +148,30 @@ class ProcessService:
         return _tail(self.log_path, lines)
 
 
-class LocalPaddle:
-    """PaddleOCR inside this process: running means the models are on the GPU."""
+class LocalOcr:
+    """The built-in OCR (rapid_local) inside this process: running means its models are loaded."""
 
-    id, name = "paddle", "PaddleOCR (in this app)"
+    id, name = "ocr", "OCR (in this app)"
 
     def __init__(self) -> None:
         self._thread: threading.Thread | None = None
         self._error = ""
 
-    def _cfg(self) -> tuple[str, str]:
-        c = settings.section("ocr", "paddle_local")
-        return c.get("lang", ""), c.get("device", "gpu")
-
     def status(self) -> dict:
         if self._thread and self._thread.is_alive():
             return {"state": "starting", "detail": "loading the models"}
-        if paddle_local.loaded(*self._cfg()):
-            return {"state": "running", "detail": f"models loaded on {self._cfg()[1]}"}
+        if rapid_local.loaded():
+            return {"state": "running", "detail": f"models loaded on {rapid_local.device()}"}
         return {"state": "stopped", "detail": self._error or "models load on the first page, or when you click Start"}
 
     def start(self) -> None:
-        if (self._thread and self._thread.is_alive()) or paddle_local.loaded(*self._cfg()):
+        if (self._thread and self._thread.is_alive()) or rapid_local.loaded():
             return
         self._error = ""
 
         def load() -> None:
             try:
-                paddle_local.preload(*self._cfg())
+                rapid_local.preload(settings.section("ocr", "rapid").get("device", "gpu"))
             except Exception as e:  # noqa: BLE001 - shown in the UI
                 self._error = f"loading failed: {e}"
 
@@ -183,7 +179,7 @@ class LocalPaddle:
         self._thread.start()
 
     def stop(self) -> None:
-        paddle_local.unload()  # waits for a page that is being read
+        rapid_local.unload()
         self._error = ""
 
     def logs(self, lines: int) -> str:
@@ -218,8 +214,8 @@ def _paddle_http_command() -> list[str]:
     cfg = settings.section("services", "paddle_server")
     python = Path(cfg.get("python", "")).expanduser()
     if not python.is_file():
-        raise ServiceError("Set services.paddle_server.python and cwd in config.toml to start the PaddleOCR server.")
-    port = _local_url(settings.section("ocr", "paddle_http")["url"], "The PaddleOCR URL")
+        raise ServiceError("Set services.paddle_server.python and cwd in config.toml to start the OCR server.")
+    port = _local_url(settings.section("ocr", "paddle_http")["url"], "The OCR server URL")
     return [str(python), "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", str(port)]
 
 
@@ -233,53 +229,18 @@ def _paddle_http_port() -> int:
 
 
 _ollama = ProcessService("ollama", "Ollama", _ollama_command, _ollama_port, owners=("ollama",))
-_paddle_http = ProcessService("paddle", "PaddleOCR server", _paddle_http_command, _paddle_http_port,
+_paddle_http = ProcessService("ocr", "OCR server", _paddle_http_command, _paddle_http_port,
                               _paddle_http_cwd, owners=("python",))
-_paddle_local = LocalPaddle()
+_local_ocr = LocalOcr()
 
 
-class LocalRapid(LocalPaddle):
-    """PaddleOCR's models on the CPU through ONNX Runtime (rapid_local): running means they are loaded."""
-
-    id, name = "paddle", "RapidOCR (in this app)"
-
-    def status(self) -> dict:
-        if self._thread and self._thread.is_alive():
-            return {"state": "starting", "detail": "loading the models"}
-        if rapid_local.loaded():
-            return {"state": "running", "detail": f"models loaded on {rapid_local.device()}"}
-        return {"state": "stopped", "detail": self._error or "models load on the first page, or when you click Start"}
-
-    def start(self) -> None:
-        if (self._thread and self._thread.is_alive()) or rapid_local.loaded():
-            return
-        self._error = ""
-
-        def load() -> None:
-            try:
-                rapid_local.preload(settings.section("ocr", "rapid").get("device", "gpu"))
-            except Exception as e:  # noqa: BLE001 - shown in the UI
-                self._error = f"loading failed: {e}"
-
-        self._thread = threading.Thread(target=load, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        rapid_local.unload()
-        self._error = ""
-
-
-_rapid_local = LocalRapid()
-
-
-def paddle() -> Service:
-    """The PaddleOCR service for the engine chosen in Settings."""
-    engine = settings.values["ocr"].get("engine", "rapid")
-    return {"paddle_http": _paddle_http, "paddle_local": _paddle_local}.get(engine, _rapid_local)
+def ocr() -> Service:
+    """The OCR service for the engine chosen in Settings."""
+    return _paddle_http if settings.values["ocr"].get("engine") == "paddle_http" else _local_ocr
 
 
 def listing() -> list[Service]:
-    return [_ollama, paddle()]
+    return [_ollama, ocr()]
 
 
 def get(id: str) -> Service | None:

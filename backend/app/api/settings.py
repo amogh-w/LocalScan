@@ -84,7 +84,7 @@ def get_settings():
         "ollama_model": v["translator"]["ollama"].get("model", ""),
         "ollama_models": models,
         "ollama_error": error,
-        "ocr": v["ocr"]["engine"],
+        "ocr": v["ocr"]["engine"] if v["ocr"]["engine"] in OCR_ENGINES else "rapid",
         "ocr_engines": list(OCR_ENGINES),
         "paddle_url": v["ocr"]["paddle_http"]["url"],
         "languages": [{"code": l.code, "name": l.name, "native": l.native} for l in LANGUAGES.values()],

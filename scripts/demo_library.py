@@ -1,7 +1,7 @@
 """Fill a running Local Scan with made-up letters, for README screenshots (never real documents).
 
     $env:LOCALSCAN_DATA_DIR = "$env:TEMP\\localscan-demo"
-    uv run --extra paddle --directory backend uvicorn app.main:app --port 8011
+    uv run --directory backend uvicorn app.main:app --port 8011
     uv run python scripts/demo_library.py http://localhost:8011
 
 Each letter is drawn as a PDF page, then photographed at an angle on a table, like a phone would.

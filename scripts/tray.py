@@ -1,6 +1,6 @@
 """Local Scan in the Windows system tray: starts the server without a console window and gives it a tray menu.
 
-Run with `run.bat -Tray` (or start it at login from the menu). Menu: open the app, copy the phone link, start with
+Started by run.bat (or at login, from the menu). The server itself is started by scripts/server.py. Menu: open the app, copy the phone link, start with
 Windows, open the log folder, restart, exit. Double-clicking the icon opens the app. Modelled on the cuppa shell
 (shared/shell.rs), which does the same for the Rust remotes.
 """
@@ -16,6 +16,9 @@ import winreg
 from pathlib import Path
 
 import pystray
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import server as launcher  # noqa: E402  scripts/server.py
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,39 +55,20 @@ def listening() -> bool:
         return False
 
 
-def log_file():
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-    return open(LOG_DIR / "server.log", "ab")
-
-
-def build_frontend() -> None:
-    """Same check run.bat makes: build when there is no build yet or a source is newer."""
-    if subprocess.run(["uv", "run", "python", "scripts/needs_build.py"], cwd=ROOT, creationflags=NO_WINDOW).returncode == 0:
-        subprocess.run(["npm", "run", "build"], cwd=ROOT / "frontend", shell=True, creationflags=NO_WINDOW,
-                       stdout=log_file(), stderr=subprocess.STDOUT)
-
-
 def start_server() -> None:
     global server
     with lock:
         if server and server.poll() is None:
             return
-        build_frontend()
-        out = log_file()
-        server = subprocess.Popen(
-            ["uv", "run", "--extra", "paddle", "--directory", "backend", "uvicorn", "app.main:app",
-             "--host", "0.0.0.0", "--port", str(PORT)],
-            cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, creationflags=NO_WINDOW,
-        )
+        launcher.stop()  # a server left over from an earlier tray or console run
+        server = launcher.start_hidden()
 
 
 def stop_server() -> None:
     global server
     with lock:
         if server and server.poll() is None:
-            # uv starts uvicorn as a child, so end the whole tree
-            subprocess.run(["taskkill", "/PID", str(server.pid), "/T", "/F"], creationflags=NO_WINDOW,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            launcher.stop()
         server = None
 
 

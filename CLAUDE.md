@@ -26,7 +26,9 @@ Prose, comments and commit messages use the plain hyphen. Never write em or en d
 .\run.bat                         # (double-clickable) server hidden + system-tray icon (scripts/tray.py), on :8010
 .\run.bat -Console                # server in this window: builds frontend if stale, prints LAN URL + QR
 .\run.bat -Dev                    # backend --reload on :8010 + Vite HMR on :5173 (phone: http://<lan-ip>:5173)
-uv sync --extra paddle            # install deps incl. in-process PaddleOCR GPU
+.\run.bat -Restart                # restart the server hidden (~1 s; builds the frontend only if stale). Use after a change
+.\run.bat -Stop                   # stop the server
+uv sync                           # install deps (run.bat does it only when pyproject.toml or uv.lock changed)
 uv run pytest                     # backend tests
 uv run pytest tests/test_ocr.py::test_paragraphs_lists_and_addresses   # single test
 cd frontend; npx tsc -b           # frontend typecheck
@@ -52,7 +54,7 @@ The pipeline for each document (`jobs.process`):
 2. **OCR** (`ocr/`): an `OcrEngine` protocol with a registry. `rapid` (the default) runs PaddleOCR's PP-OCRv6
    models through ONNX Runtime (RapidOCR; models ship in the wheel) on the GPU with DirectML (`onnxruntime-directml`,
    about 0.2 s per page; no CUDA, since the CUDA provider crashes in cuBLAS too), or the CPU (about 2 s);
-   `paddle_local` runs PaddleOCR in-process on the GPU; `paddle_http` calls a server (multipart, PaddleX or PaddleHub formats). Digital PDF
+   `paddle_http` calls a server (multipart, PaddleX or PaddleHub formats). Digital PDF
    imports use their own text layer (`pdf_text.py`) and skip OCR.
 3. **Blocks** (`ocr/blocks.py`): lines are grouped into blocks. A block either *flows* (prose, reflowed)
    or keeps its lines (addresses, sidebars, tables, lists), in which case its text holds `\n` and each
@@ -153,14 +155,15 @@ Ollama and PaddleOCR are started, stopped, health-checked and log-read from Sett
 user clicks Start. `ProcessService` launches a program hidden (Ollama: `ollama serve`; engine `paddle_http`: the separate
 server from `[services.paddle_server]` in `config.toml`), logs to `data/logs/<id>.log`, reports state by port
 (`running` / `starting` / `stopped`) and stops it by killing the process tree on that port, but only when it is ours or
-its name matches (`owners`); it never kills a stranger on the port. With `paddle_local` the "service" is the loaded
-models (`paddle_local.preload` / `unload`; Stop frees GPU memory). Services whose URL is not on this PC cannot be started.
+its name matches (`owners`); it never kills a stranger on the port. With `rapid` the "service" is the loaded
+models (`services.LocalOcr`, `rapid_local.preload` / `unload`; Stop frees their memory). Services whose URL is not on this PC cannot be started.
 `GET /api/services`, `POST /api/services/<id>/start|stop`, `GET /api/services/<id>/logs`. The page polls state every
 2 s; the health check is `/api/health`. Tests: `tests/test_services.py`.
 
 ### Tray (`scripts/tray.py`)
 
-`run.bat` starts the server hidden (log in `data/logs/server.log`) and a pystray icon: open, copy phone link,
+`scripts/server.py` is the one launcher (stop what listens on 8010, build the frontend if stale, start the venv's
+Python directly, never `uv run`, which re-checks the venv on every start); `run.bat` and the tray use it. `run.bat` starts the server hidden (log in `data/logs/server.log`) and a pystray icon: open, copy phone link,
 start with Windows (HKCU Run key), open log folder, restart, exit (which ends the whole server process tree). One tray
 at a time (a named mutex); a second start just opens the app. The tooltip shows running, starting or stopped. It
 mirrors the cuppa shell (`shared/shell.rs`).
@@ -269,10 +272,6 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
   once rendered `<FolderRow folder={f} {...props} />` while `props` carried the parent's `folder`, so every
   child row rendered its parent again and recursed forever: nesting one folder froze the tab. Test
   nested data in the browser, since nothing else will catch it.
-- **Paddle must be the CUDA 12.9 build** (`paddle-cu129` index in `pyproject.toml`). The cu126 build
-  runs on the RTX 5080 (Blackwell, sm_120) but returns garbage text. The Windows wheel doesn't declare
-  its CUDA DLLs, so the `paddle` extra pins `nvidia-*-cu12` wheels explicitly, and `tool.uv.environments`
-  limits resolution to Windows.
 - **Port 8010**, not 8000: `~/Projects/Paddle/start_server.bat` (the user's separate OCR server) kills
   whatever listens on 8000.
 - Bump `jobs.SCAN_VERSION` whenever the dewarp or filter code changes, or old documents keep their stale
@@ -280,18 +279,14 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
 - On Windows the dev servers' file watchers sometimes miss changes: Vite has served stale modules, and
   `uvicorn --reload` has kept old backend code (it served old PDF names after an edit). If a change
   doesn't show up, touch the file or restart the backend before debugging further.
-- **A native crash in PaddleOCR kills the whole server** (no traceback, the port just stops answering; Windows logs
-  an Application Error with the faulting module). Seen: `cublasLt64_12.dll` "illegal instruction" (0xc000001d) on the
-  first 1x1 convolution when Windows has AVX-512 switched off (`IsProcessorFeaturePresent(41)` is false) while the CPU
-  still advertises it, which began after a reboot. No Paddle or cuBLAS setting avoids it; the fix is on the PC (BIOS
-  AVX-512 setting, or Memory integrity off). `paddle_local.check_gpu_libraries` runs that convolution in a child
-  process before loading the models, so the server survives and Settings > Services shows the reason. This is why
-  the default engine is `rapid` (DirectML, no cuBLAS).
-- OCR models load lazily on the first page (about a minute of GPU warm-up), and every backend reload
-  unloads them. `/api/health` is slow the first time for the same reason.
-- `paddlex` depends on `opencv-contrib-python`, so that is the cv2 package here as well; never add
-  `opencv-python(-headless)` alongside it. `rapidocr` asks for the headless one, so `tool.uv.override-dependencies`
-  drops it.
+- **No Paddle, no CUDA in this app.** With Memory integrity on, Windows hides AVX-512 (`IsProcessorFeaturePresent(41)`
+  is false) while the CPU still advertises it, and CUDA's cuBLAS (Paddle, the ONNX CUDA provider) and Ollama's
+  AVX-512 CPU backend then die with "illegal instruction" (0xc000001d), taking the process down with no traceback.
+  So OCR is RapidOCR on DirectML. The Paddle implementation (`paddle_local`, the `paddle` extra) was removed; an old
+  `engine = "paddle_local"` setting falls back to `rapid`.
+- OCR models load lazily on the first page (under a second on DirectML), and every backend restart unloads them.
+- cv2 is `opencv-python-headless` only. Never add a second OpenCV package (contrib, non-headless): they install into
+  the same `cv2` folder and break each other.
 - **Tests use synthetic letters only** ("Max Mustermann", "Musterstadt"). Never copy names, addresses,
   amounts or reference numbers from the user's real documents into tests or fixtures.
 - External services: Ollama on `localhost:11434`. The model is picked in Settings; empty means the

@@ -8,7 +8,7 @@ type Check = { ok: boolean; detail: string };
 
 /** Which part of /api/health describes which service. */
 const checkOf = (id: string, h: Health | null): Check | undefined =>
-  id === "ollama" ? h?.translator : id === "paddle" ? h?.ocr : undefined;
+  id === "ollama" ? h?.translator : id === "ocr" ? h?.ocr : undefined;
 
 const STATE: Record<ServiceInfo["state"], { label: string; color?: string }> = {
   running: { label: "Running", color: "green" },
@@ -92,7 +92,7 @@ export default function Services({ onError }: { onError: (message: string | null
     <section className="card stack">
       <h2 className="with-icon"><Activity /> Services</h2>
       <p className="muted small">
-        Nothing here starts by itself. Start what you need: translating needs Ollama, and reading pages needs PaddleOCR.
+        Nothing here starts by itself. Start what you need: translating needs Ollama, and reading pages needs OCR.
       </p>
       {list === null ? <p className="muted">Loading…</p> : list.map((s) => {
         const c = checkOf(s.id, health);

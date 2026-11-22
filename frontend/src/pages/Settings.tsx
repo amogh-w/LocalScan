@@ -7,9 +7,8 @@ import Services from "../components/Services";
 import { Select, tone } from "../components/kit";
 
 const OCR_LABELS: Record<string, string> = {
-  rapid: "RapidOCR (GPU via DirectML, recommended)",
-  paddle_local: "PaddleOCR (GPU via CUDA)",
-  paddle_http: "PaddleOCR server (HTTP)",
+  rapid: "Built in (GPU via DirectML)",
+  paddle_http: "OCR server (HTTP)",
 };
 
 export default function SettingsPage() {
@@ -112,7 +111,7 @@ export default function SettingsPage() {
 
             <section className="card stack">
               <h2 className="with-icon">
-                <ScanText /> OCR (PaddleOCR)
+                <ScanText /> OCR
               </h2>
               <label className="labelled">
                 Engine
@@ -137,9 +136,6 @@ export default function SettingsPage() {
               )}
               {s.ocr === "rapid" && (
                 <p className="muted small">PaddleOCR's models run inside the app on the GPU through DirectML (no CUDA), or on the CPU if no GPU is usable.</p>
-              )}
-              {s.ocr === "paddle_local" && (
-                <p className="muted small">Runs on this PC's GPU inside the app. The first page takes a few extra seconds while models load.</p>
               )}
             </section>
           </>

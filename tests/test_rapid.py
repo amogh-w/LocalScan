@@ -28,6 +28,15 @@ def test_reads_the_german_letter_on_the_cpu(letter_image, fresh_model):
     assert x0 < x1 and y0 < y1 and all(0.5 < l["conf"] <= 1 for l in lines)
 
 
+def test_reads_the_german_letter_on_the_gpu(letter_image, fresh_model):
+    import onnxruntime as ort
+
+    if "DmlExecutionProvider" not in ort.get_available_providers():
+        pytest.skip("no DirectML on this PC")
+    texts = [l["text"] for l in rapid_local.RapidLocalOcr(device="gpu").ocr(letter_image)]
+    assert rapid_local.device() == "the GPU (DirectML)" and "Mit freundlichen Grüßen" in texts
+
+
 def test_is_the_default_engine_and_gets_the_scan_language():
     ocr = get_ocr()
     assert ocr.name == "rapid" and ocr.lang is not None
@@ -36,7 +45,7 @@ def test_is_the_default_engine_and_gets_the_scan_language():
 
 def test_settings_service_loads_and_frees_the_models(monkeypatch, fresh_model):
     monkeypatch.setattr(rapid_local, "_load", lambda device="gpu": setattr(rapid_local, "_model", object()))  # no real models
-    svc = services.LocalRapid()
+    svc = services.LocalOcr()
     assert svc.status()["state"] == "stopped"
     svc.start()
     end = time.time() + 5
@@ -52,7 +61,7 @@ def test_a_load_error_is_shown_not_raised(monkeypatch, fresh_model):
         raise RuntimeError("no models")
 
     monkeypatch.setattr(rapid_local, "preload", broken)
-    svc = services.LocalRapid()
+    svc = services.LocalOcr()
     svc.start()
     svc._thread.join(5)
     assert svc.status() == {"state": "stopped", "detail": "loading failed: no models"}
