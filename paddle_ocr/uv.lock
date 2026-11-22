@@ -428,8 +428,8 @@ requires-dist = [
     { name = "nvidia-cusolver-cu12", specifier = "==11.7.1.2" },
     { name = "nvidia-cusparse-cu12", specifier = "==12.5.4.2" },
     { name = "nvidia-nvjitlink-cu12", specifier = "==12.9.86" },
-    { name = "paddleocr", specifier = "==3.7.0" },
-    { name = "paddlepaddle-gpu", specifier = "==3.3.1", index = "https://www.paddlepaddle.org.cn/packages/stable/cu129/" },
+    { name = "paddleocr", git = "https://github.com/PaddlePaddle/PaddleOCR?rev=dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf" },
+    { name = "paddlepaddle-gpu", specifier = "==3.4.0", index = "https://www.paddlepaddle.org.cn/packages/stable/cu129/" },
     { name = "python-multipart", specifier = ">=0.0.12" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
@@ -626,8 +626,8 @@ wheels = [
 
 [[package]]
 name = "paddleocr"
-version = "3.7.0"
-source = { registry = "https://pypi.org/simple" }
+version = "3.8.0.dev13+gdab3fe35"
+source = { git = "https://github.com/PaddlePaddle/PaddleOCR?rev=dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf#dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf" }
 dependencies = [
     { name = "aiohttp" },
     { name = "paddlex", extra = ["ocr-core"] },
@@ -635,14 +635,10 @@ dependencies = [
     { name = "requests" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/97/b1/9454e886afa925067ce51de2e513d146524645888de299d51ddc1caa3100/paddleocr-3.7.0.tar.gz", hash = "sha256:9b81eb62cf37e590d4873e60262ff56f968ff9de6ce1f565749760ceb1c422e2", size = 3082862, upload-time = "2026-06-11T12:09:52.545Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/79/2ade66cf72074a3d2a013e2ba1f256d6116fec797b908fc1b4f9c320d8c4/paddleocr-3.7.0-py3-none-any.whl", hash = "sha256:c0f0a81ad4112727f30c6fcf986ac0ef6a120d31ee0991a01fae0357ee32d338", size = 146750, upload-time = "2026-06-11T12:09:51.204Z" },
-]
 
 [[package]]
 name = "paddlepaddle-gpu"
-version = "3.3.1"
+version = "3.4.0"
 source = { registry = "https://www.paddlepaddle.org.cn/packages/stable/cu129/" }
 dependencies = [
     { name = "httpx" },
@@ -656,7 +652,7 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://paddle-whl.cdn.bcebos.com/stable/cu129/paddlepaddle-gpu/paddlepaddle_gpu-3.3.1-cp312-cp312-win_amd64.whl" },
+    { url = "https://paddle-whl.cdn.bcebos.com/stable/cu129/paddlepaddle-gpu/paddlepaddle_gpu-3.4.0-cp312-cp312-win_amd64.whl" },
 ]
 
 [[package]]

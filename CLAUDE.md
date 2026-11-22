@@ -280,7 +280,8 @@ surface0. Names in `app.css` avoid the kit's (`app-bar`, `page-thumb`, `doc-tabb
 - On Windows the dev servers' file watchers sometimes miss changes: Vite has served stale modules, and
   `uvicorn --reload` has kept old backend code (it served old PDF names after an edit). If a change
   doesn't show up, touch the file or restart the backend before debugging further.
-- **Paddle lives in `paddle_ocr/`, never in the app's venv** (its OpenCV and CUDA wheels broke the app's once). Paddle
+- **Paddle lives in `paddle_ocr/`, never in the app's venv** (its OpenCV and CUDA wheels broke the app's once). PaddleOCR
+  comes from GitHub `main`, pinned to a commit in `paddle_ocr/pyproject.toml` (bump the rev, then `uv sync` there). Paddle
   must be the cu129 build (RTX 5080, sm_120: cu126 returns garbage text), but with the **CUDA 12.6 runtime wheels**
   (cuBLAS 12.6.4.1, cuDNN 9.5.1) pinned in `paddle_ocr/pyproject.toml`. cuBLAS 12.9 picks AVX-512 code from CPUID and
   dies with "illegal instruction" (0xc000001d) while Windows hides AVX-512 (`IsProcessorFeaturePresent(41)` false:

@@ -7,8 +7,9 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.30",
     "python-multipart>=0.0.12",
-    "paddleocr==3.7.0",
-    "paddlepaddle-gpu==3.3.1",
+    # PaddleOCR straight from GitHub (main, pinned to a commit so rebuilds are repeatable); update the rev to move on.
+    "paddleocr @ git+https://github.com/PaddlePaddle/PaddleOCR@dab3fe35379033fdcb2d0e9572fac0b36c9a9ebf",
+    "paddlepaddle-gpu==3.4.0",
     # The CUDA runtime DLLs. Paddle's Windows wheel doesn't declare them, so they are listed here. Paddle itself must be
     # the cu129 build for RTX 50xx (Blackwell, sm_120; the cu126 build returns garbage text), but the libraries are the
     # CUDA 12.6 ones: cuBLAS 12.9 picks AVX-512 code from CPUID and dies with "illegal instruction" while Windows hides
